@@ -83,6 +83,9 @@ Bạn cần:
 3. Set Kaggle Secret:
    - `HF_TOKEN`
    - `WANDB_API_KEY` (optional, để log training lên Weights & Biases)
+   - `TRAIN_REPO_URL` (optional, mặc định `https://github.com/dungca1512/whisper-finetune-ja-train.git`)
+   - `TRAIN_REPO_REF` (optional, nhánh/tag cần clone khi runtime thiếu source, mặc định `main`)
+   - `GITHUB_TOKEN` (optional, bắt buộc nếu repo private và cần clone fallback)
 
 Khi push lên `main`, workflow sẽ `kaggle kernels push -p .` để trigger training run trên Kaggle.
 W&B được bật mặc định trong Kaggle run; nếu cần tắt thì set `ENABLE_WANDB=0`.
