@@ -181,7 +181,6 @@ jobs:
           python - <<'PY'
           import json
           import os
-          import re
           from pathlib import Path
 
           script_path = Path("whisper_ja/cli/kaggle_train.py")
@@ -196,12 +195,20 @@ jobs:
           }
           payload = {k: v for k, v in payload.items() if v}
 
-          pattern = r"EMBEDDED_RUNTIME_SECRETS: dict\\[str, str\\] = \\{\\}"
-          replacement = f"EMBEDDED_RUNTIME_SECRETS: dict[str, str] = {json.dumps(payload, ensure_ascii=False)}"
-          patched, count = re.subn(pattern, replacement, source, count=1)
-          if count != 1:
+          marker = "EMBEDDED_RUNTIME_SECRETS: dict[str, str] = "
+          replacement_line = marker + json.dumps(payload, ensure_ascii=False)
+          lines = source.splitlines()
+          replaced = False
+          for idx, line in enumerate(lines):
+              if line.strip().startswith(marker):
+                  lines[idx] = replacement_line
+                  replaced = True
+                  break
+
+          if not replaced:
               raise SystemExit("Failed to locate EMBEDDED_RUNTIME_SECRETS placeholder for patching")
 
+          patched = "\n".join(lines) + ("\n" if source.endswith("\n") else "")
           script_path.write_text(patched, encoding="utf-8")
           print(f"Injected secret keys into script: {sorted(payload.keys())}")
           PY
