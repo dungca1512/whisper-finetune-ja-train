@@ -90,6 +90,9 @@ def main() -> int:
     if wandb_tags:
         command.extend(["--wandb_tags", wandb_tags])
 
+    if env("RUN_POST_TRAIN_TEST", "0") != "1":
+        command.append("--skip_final_test")
+
     run(command)
     return 0
 

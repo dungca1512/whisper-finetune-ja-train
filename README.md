@@ -39,6 +39,9 @@ python train.py --push_to_hub \
 
 # Nếu cần thử full finetune
 python train.py --full_finetune
+
+# Bỏ test inference cuối run (hữu ích cho môi trường CI/Kaggle)
+python train.py --skip_final_test
 ```
 
 ## Split Repo Architecture
@@ -84,6 +87,7 @@ Bạn cần:
 Khi push lên `main`, workflow sẽ `kaggle kernels push -p .` để trigger training run trên Kaggle.
 W&B được bật mặc định trong Kaggle run; nếu cần tắt thì set `ENABLE_WANDB=0`.
 Bạn có thể gắn tag cho W&B run bằng env `WANDB_TAGS`, ví dụ: `WANDB_TAGS=kaggle,lora,reazonspeech-small`.
+Kaggle run mặc định skip post-train inference test; bật lại bằng `RUN_POST_TRAIN_TEST=1`.
 
 ## MLOps Flow (CI + CT + CD)
 

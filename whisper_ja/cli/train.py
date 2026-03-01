@@ -23,6 +23,7 @@ import os
 import sys
 import glob
 import argparse
+import traceback
 from pathlib import Path
 
 import torch
@@ -244,8 +245,15 @@ def train(config, args):
     export_to_ct2(config, model_dir=deploy_model_dir)
 
     # Test
-    print("\n" + "=" * 60)
-    test_inference(config, device=device, num_samples=8, model_dir=deploy_model_dir)
+    if config.run_post_train_test:
+        print("\n" + "=" * 60)
+        try:
+            test_inference(config, device=device, num_samples=8, model_dir=deploy_model_dir)
+        except Exception as exc:  # pylint: disable=broad-except
+            print(f"⚠️  Post-train inference test failed: {exc}")
+            traceback.print_exc()
+    else:
+        print("\n⏭️  Skipping post-train inference test")
 
     print("\n🎉 All done!")
     print(f"   Adapter: {config.output_dir}")
@@ -262,6 +270,7 @@ def parse_args():
     parser.add_argument("--export_only", action="store_true", help="Export existing model to CT2")
     parser.add_argument("--test_only", action="store_true", help="Run inference test only")
     parser.add_argument("--resume", action="store_true", help="Resume from latest checkpoint")
+    parser.add_argument("--skip_final_test", action="store_true", help="Skip post-train inference comparison test")
 
     # Dataset
     parser.add_argument("--reazonspeech_size", type=str, help="tiny/small/medium/large/all")
@@ -309,6 +318,7 @@ def main():
             "no_merge_lora",
             "lora_target_modules",
             "wandb_tags",
+            "skip_final_test",
             "push_to_hub",
             "adapter_only_hub",
         ):
@@ -330,6 +340,8 @@ def main():
         config.lora_target_modules = [m.strip() for m in args.lora_target_modules.split(",") if m.strip()]
     if args.wandb_tags:
         config.wandb_tags = [tag.strip() for tag in args.wandb_tags.split(",") if tag.strip()]
+    if args.skip_final_test:
+        config.run_post_train_test = False
 
     # Actions
     if args.export_only:

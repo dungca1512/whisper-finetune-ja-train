@@ -48,6 +48,7 @@ class Config:
     logging_steps: int = 50
     save_total_limit: int = 3
     early_stopping_patience: int = 3
+    run_post_train_test: bool = True
 
     # === W&B ===
     use_wandb: bool = True
