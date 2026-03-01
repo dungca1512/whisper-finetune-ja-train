@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 
 def env(name: str, default: str) -> str:
@@ -47,13 +48,69 @@ def run(cmd: list[str]) -> None:
     subprocess.check_call(cmd)
 
 
+def resolve_file_path(filename: str) -> Path | None:
+    candidates = [
+        Path.cwd() / filename,
+        Path(__file__).resolve().parent / filename,
+        Path(__file__).resolve().parent.parent / filename,
+        Path(__file__).resolve().parent.parent.parent / filename,
+        Path("/kaggle/src") / filename,
+        Path("/kaggle/working") / filename,
+    ]
+    for path in candidates:
+        if path.is_file():
+            return path
+    return None
+
+
+def install_dependencies() -> None:
+    requirements_path = resolve_file_path("requirements.txt")
+    if requirements_path:
+        print(f"✅ Using requirements file: {requirements_path}")
+        run([sys.executable, "-m", "pip", "install", "-r", str(requirements_path)])
+        return
+
+    print("⚠️  requirements.txt not found. Installing fallback dependencies...")
+    run([
+        sys.executable,
+        "-m",
+        "pip",
+        "install",
+        "torch>=2.0",
+        "transformers>=4.40",
+        "datasets==2.21.0",
+        "accelerate",
+        "evaluate",
+        "jiwer",
+        "soundfile",
+        "librosa",
+        "wandb",
+        "huggingface_hub",
+        "peft",
+        "ctranslate2",
+        "faster-whisper",
+        "tensorboard",
+    ])
+
+
+def resolve_train_entrypoint() -> list[str]:
+    train_path = resolve_file_path("train.py")
+    if train_path:
+        print(f"✅ Using train entrypoint: {train_path}")
+        return [sys.executable, str(train_path)]
+
+    print("⚠️  train.py not found. Falling back to module entrypoint: whisper_ja.cli.train")
+    return [sys.executable, "-m", "whisper_ja.cli.train"]
+
+
 def main() -> int:
+    print(f"Working directory: {Path.cwd()}")
+    print(f"Script location: {Path(__file__).resolve()}")
     run([sys.executable, "-m", "pip", "install", "--upgrade", "pip"])
-    run([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"])
+    install_dependencies()
 
     command = [
-        sys.executable,
-        "train.py",
+        *resolve_train_entrypoint(),
         "--reazonspeech_size", env("REAZONSPEECH_SIZE", "small"),
         "--batch_size", str(env_int("BATCH_SIZE", 32)),
         "--num_train_epochs", str(env_int("NUM_EPOCHS", 3)),
