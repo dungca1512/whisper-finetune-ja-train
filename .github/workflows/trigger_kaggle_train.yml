@@ -142,10 +142,42 @@ jobs:
           fi
           echo "Kernel owner check passed: ${KERNEL_OWNER}"
 
+      - name: Create runtime secret bundle for Kaggle run
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          WANDB_API_KEY: ${{ secrets.WANDB_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TRAIN_REPO_URL: https://github.com/${{ github.repository }}.git
+          TRAIN_REPO_REF: ${{ github.ref_name }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          payload = {
+              "HF_TOKEN": os.environ.get("HF_TOKEN", "").strip(),
+              "WANDB_API_KEY": os.environ.get("WANDB_API_KEY", "").strip(),
+              "GITHUB_TOKEN": os.environ.get("GITHUB_TOKEN", "").strip(),
+              "TRAIN_REPO_URL": os.environ.get("TRAIN_REPO_URL", "").strip(),
+              "TRAIN_REPO_REF": os.environ.get("TRAIN_REPO_REF", "").strip(),
+          }
+          payload = {k: v for k, v in payload.items() if v}
+
+          path = Path("runtime_secrets.json")
+          path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+          path.chmod(0o600)
+          print(f"Created {path} with keys: {sorted(payload.keys())}")
+          PY
+
       - name: Push kernel and trigger run
         run: |
           set -euo pipefail
           kaggle kernels push -p .
+
+      - name: Clean up runtime secret bundle
+        if: always()
+        run: rm -f runtime_secrets.json
 
       - name: Print kernel status
         run: |

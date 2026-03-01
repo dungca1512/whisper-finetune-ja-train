@@ -80,12 +80,15 @@ Bạn cần:
    - `KAGGLE_KEY`
    - `HF_TOKEN` (dùng cho data validation trong workflow CT)
    - `CROSS_REPO_PAT` (dùng để dispatch CD sang repo demo)
-3. Set Kaggle Secret:
+3. Không bắt buộc set secret thủ công trong Kaggle Notebook.
+   Workflow CT sẽ tự tạo `runtime_secrets.json` từ GitHub Secrets và đẩy kèm kernel run.
+4. Nếu muốn fallback bằng Kaggle UI (tuỳ chọn), bạn vẫn có thể thêm:
    - `HF_TOKEN`
-   - `WANDB_API_KEY` (optional, để log training lên Weights & Biases)
-   - `TRAIN_REPO_URL` (optional, mặc định `https://github.com/dungca1512/whisper-finetune-ja-train.git`)
-   - `TRAIN_REPO_REF` (optional, nhánh/tag cần clone khi runtime thiếu source, mặc định `main`)
-   - `GITHUB_TOKEN` (bắt buộc nếu repo private và cần clone fallback)
+   - `WANDB_API_KEY`
+   - `TRAIN_REPO_URL`
+   - `TRAIN_REPO_REF`
+   - `GITHUB_TOKEN`
+   theo đường dẫn `Edit Notebook` -> `Add-ons` -> `Secrets`.
 
 Khi push lên `main`, workflow sẽ `kaggle kernels push -p .` để trigger training run trên Kaggle.
 W&B được bật mặc định trong Kaggle run; nếu cần tắt thì set `ENABLE_WANDB=0`.

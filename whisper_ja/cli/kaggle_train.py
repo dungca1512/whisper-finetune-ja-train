@@ -16,8 +16,91 @@ from urllib.parse import quote
 from pathlib import Path
 
 
+_KAGGLE_SECRETS_CLIENT = None
+_KAGGLE_SECRETS_CACHE: dict[str, str] = {}
+_RUNTIME_SECRET_BUNDLE: dict[str, str] | None = None
+
+
+def _load_runtime_secret_bundle() -> dict[str, str]:
+    global _RUNTIME_SECRET_BUNDLE
+    if _RUNTIME_SECRET_BUNDLE is not None:
+        return _RUNTIME_SECRET_BUNDLE
+
+    candidates = [
+        Path.cwd() / "runtime_secrets.json",
+        Path(__file__).resolve().parent / "runtime_secrets.json",
+        Path(__file__).resolve().parent.parent / "runtime_secrets.json",
+        Path(__file__).resolve().parent.parent.parent / "runtime_secrets.json",
+        Path("/kaggle/src/runtime_secrets.json"),
+        Path("/kaggle/working/runtime_secrets.json"),
+    ]
+
+    bundle: dict[str, str] = {}
+    for path in candidates:
+        if not path.is_file():
+            continue
+        try:
+            import json
+
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(raw, dict):
+                bundle = {
+                    str(k): str(v).strip()
+                    for k, v in raw.items()
+                    if isinstance(v, (str, int, float)) and str(v).strip()
+                }
+                print(f"✅ Loaded runtime secret bundle from {path} (keys={sorted(bundle.keys())})")
+                break
+        except Exception as exc:  # pylint: disable=broad-except
+            print(f"⚠️  Failed to read runtime secret bundle at {path}: {exc}")
+
+    _RUNTIME_SECRET_BUNDLE = bundle
+    return _RUNTIME_SECRET_BUNDLE
+
+
+def _get_kaggle_secret(name: str) -> str:
+    global _KAGGLE_SECRETS_CLIENT
+
+    if name in _KAGGLE_SECRETS_CACHE:
+        return _KAGGLE_SECRETS_CACHE[name]
+
+    try:
+        from kaggle_secrets import UserSecretsClient
+    except Exception:
+        _KAGGLE_SECRETS_CACHE[name] = ""
+        return ""
+
+    try:
+        if _KAGGLE_SECRETS_CLIENT is None:
+            _KAGGLE_SECRETS_CLIENT = UserSecretsClient()
+        value = _KAGGLE_SECRETS_CLIENT.get_secret(name) or ""
+        value = value.strip()
+        if value:
+            print(f"✅ Loaded Kaggle Secret: {name}")
+        _KAGGLE_SECRETS_CACHE[name] = value
+        return value
+    except Exception:
+        _KAGGLE_SECRETS_CACHE[name] = ""
+        return ""
+
+
 def env(name: str, default: str) -> str:
-    return os.environ.get(name, default).strip()
+    value = os.environ.get(name, "").strip()
+    if value:
+        return value
+
+    bundle = _load_runtime_secret_bundle()
+    bundle_value = bundle.get(name, "").strip()
+    if bundle_value:
+        os.environ[name] = bundle_value
+        return bundle_value
+
+    secret_value = _get_kaggle_secret(name)
+    if secret_value:
+        os.environ[name] = secret_value
+        return secret_value
+
+    return default.strip()
 
 
 def env_int(name: str, default: int) -> int:
