@@ -60,9 +60,16 @@ def setup_wandb(config):
         config.use_wandb = False
         return
 
+    tags = list(config.wandb_tags)
+    env_tags = os.getenv("WANDB_TAGS", "")
+    if env_tags:
+        tags.extend([tag.strip() for tag in env_tags.split(",") if tag.strip()])
+    tags = list(dict.fromkeys(tags))
+
     wandb.init(
         project=config.wandb_project,
         name=f"reazonspeech-{config.reazonspeech_size}-{config.num_train_epochs}ep",
+        tags=tags or None,
         config={
             "model": config.model_name,
             "dataset": f"reazonspeech-{config.reazonspeech_size}",
@@ -276,6 +283,7 @@ def parse_args():
     # Tokens
     parser.add_argument("--hf_token", type=str, help="HuggingFace token")
     parser.add_argument("--wandb_key", type=str, help="W&B API key")
+    parser.add_argument("--wandb_tags", type=str, help="Comma-separated W&B tags")
     parser.add_argument("--no_wandb", action="store_true", help="Disable W&B")
     parser.add_argument("--num_proc", type=int, help="CPU cores for preprocessing")
     parser.add_argument("--push_to_hub", action="store_true", help="Upload artifacts to HF Hub")
@@ -300,6 +308,7 @@ def main():
             "full_finetune",
             "no_merge_lora",
             "lora_target_modules",
+            "wandb_tags",
             "push_to_hub",
             "adapter_only_hub",
         ):
@@ -319,6 +328,8 @@ def main():
         config.push_merged_to_hub = False
     if args.lora_target_modules:
         config.lora_target_modules = [m.strip() for m in args.lora_target_modules.split(",") if m.strip()]
+    if args.wandb_tags:
+        config.wandb_tags = [tag.strip() for tag in args.wandb_tags.split(",") if tag.strip()]
 
     # Actions
     if args.export_only:

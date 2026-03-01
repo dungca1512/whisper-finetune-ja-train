@@ -161,43 +161,59 @@ def main() -> int:
     jp_ratios: list[float] = []
 
     if not missing_columns:
-        for idx in range(evaluated_samples):
-            sample = dataset[idx]
-            text_raw = sample.get(args.text_column, "")
-            text = "" if text_raw is None else str(text_raw).strip()
+        if args.skip_audio_checks:
+            # Access text column directly to avoid triggering audio decoding in CI.
+            text_values = dataset[args.text_column]
+            for idx, text_raw in enumerate(text_values):
+                text = "" if text_raw is None else str(text_raw).strip()
 
-            if not text:
-                empty_text_count += 1
-                if len(issues) < args.max_issue_examples:
-                    issues.append(
-                        {
-                            "index": idx,
-                            "type": "empty_text",
-                            "message": f"Column '{args.text_column}' is empty",
-                        }
-                    )
-            else:
-                jp_ratios.append(japanese_char_ratio(text))
+                if not text:
+                    empty_text_count += 1
+                    if len(issues) < args.max_issue_examples:
+                        issues.append(
+                            {
+                                "index": idx,
+                                "type": "empty_text",
+                                "message": f"Column '{args.text_column}' is empty",
+                            }
+                        )
+                else:
+                    jp_ratios.append(japanese_char_ratio(text))
+        else:
+            for idx in range(evaluated_samples):
+                sample = dataset[idx]
+                text_raw = sample.get(args.text_column, "")
+                text = "" if text_raw is None else str(text_raw).strip()
 
-            if args.skip_audio_checks:
-                continue
+                if not text:
+                    empty_text_count += 1
+                    if len(issues) < args.max_issue_examples:
+                        issues.append(
+                            {
+                                "index": idx,
+                                "type": "empty_text",
+                                "message": f"Column '{args.text_column}' is empty",
+                            }
+                        )
+                else:
+                    jp_ratios.append(japanese_char_ratio(text))
 
-            audio = sample.get(args.audio_column)
-            ok, duration, reason = check_audio_sample(audio)
-            if ok:
-                valid_audio_count += 1
-                if duration is not None:
-                    durations.append(duration)
-            else:
-                invalid_audio_count += 1
-                if len(issues) < args.max_issue_examples:
-                    issues.append(
-                        {
-                            "index": idx,
-                            "type": "invalid_audio",
-                            "message": reason,
-                        }
-                    )
+                audio = sample.get(args.audio_column)
+                ok, duration, reason = check_audio_sample(audio)
+                if ok:
+                    valid_audio_count += 1
+                    if duration is not None:
+                        durations.append(duration)
+                else:
+                    invalid_audio_count += 1
+                    if len(issues) < args.max_issue_examples:
+                        issues.append(
+                            {
+                                "index": idx,
+                                "type": "invalid_audio",
+                                "message": reason,
+                            }
+                        )
 
     empty_text_ratio = (empty_text_count / evaluated_samples) if evaluated_samples else 1.0
     invalid_audio_ratio = (invalid_audio_count / evaluated_samples) if evaluated_samples else 1.0

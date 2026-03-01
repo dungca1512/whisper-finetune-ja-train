@@ -29,6 +29,9 @@ CLI thường dùng:
 # Tinh chỉnh LoRA
 python train.py --lora_r 16 --lora_alpha 32 --lora_dropout 0.05 --lora_target_modules q_proj,v_proj
 
+# Gắn tag cho W&B run
+python train.py --wandb_tags kaggle,lora,reazonspeech-small
+
 # Bật push Hub cho cả adapter + merged model
 python train.py --push_to_hub \
   --hub_adapter_model_id dungca/whisper-tiny-ja-lora \
@@ -80,6 +83,7 @@ Bạn cần:
 
 Khi push lên `main`, workflow sẽ `kaggle kernels push -p .` để trigger training run trên Kaggle.
 W&B được bật mặc định trong Kaggle run; nếu cần tắt thì set `ENABLE_WANDB=0`.
+Bạn có thể gắn tag cho W&B run bằng env `WANDB_TAGS`, ví dụ: `WANDB_TAGS=kaggle,lora,reazonspeech-small`.
 
 ## MLOps Flow (CI + CT + CD)
 

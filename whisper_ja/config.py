@@ -53,6 +53,7 @@ class Config:
     use_wandb: bool = True
     wandb_project: str = "whisper-tiny-ja"
     wandb_key: str = ""  # Paste key hoặc set env WANDB_API_KEY
+    wandb_tags: list[str] = field(default_factory=list)
 
     # === Preprocessing ===
     num_proc: int = 8  # Số CPU cores dùng cho preprocessing

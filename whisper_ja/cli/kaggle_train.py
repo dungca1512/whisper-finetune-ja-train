@@ -86,6 +86,10 @@ def main() -> int:
     if target_modules:
         command.extend(["--lora_target_modules", target_modules])
 
+    wandb_tags = env("WANDB_TAGS", "")
+    if wandb_tags:
+        command.extend(["--wandb_tags", wandb_tags])
+
     run(command)
     return 0
 
