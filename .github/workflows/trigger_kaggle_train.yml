@@ -41,6 +41,7 @@ jobs:
         run: |
           python - <<'PY'
           import json
+          import re
           from pathlib import Path
 
           path = Path("kernel-metadata.json")
@@ -49,10 +50,26 @@ jobs:
 
           metadata = json.loads(path.read_text(encoding="utf-8"))
           kernel_id = metadata.get("id", "")
+          title = metadata.get("title", "").strip()
           if not kernel_id:
               raise SystemExit("kernel-metadata.json missing field: id")
           if "your_kaggle_username" in kernel_id:
               raise SystemExit("Please replace placeholder in kernel-metadata.json id")
+          if "/" not in kernel_id:
+              raise SystemExit("kernel-metadata.json id must be in format: username/kernel-slug")
+          if not title:
+              raise SystemExit("kernel-metadata.json missing field: title")
+
+          def slugify(value: str) -> str:
+              return re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
+
+          kernel_slug = kernel_id.split("/", 1)[1]
+          title_slug = slugify(title)
+          if title_slug != kernel_slug:
+              raise SystemExit(
+                  "kernel-metadata title slug does not match id slug "
+                  f"({title_slug} != {kernel_slug}). Update title to avoid Kaggle 409 conflicts."
+              )
           print(f"Kernel id: {kernel_id}")
           PY
 

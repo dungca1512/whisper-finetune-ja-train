@@ -1,6 +1,6 @@
 {
   "id": "dungconganh/whisper-finetune-ja-lora-train",
-  "title": "Whisper JA LoRA Training",
+  "title": "Whisper Finetune JA LoRA Train",
   "code_file": "kaggle_train.py",
   "language": "python",
   "kernel_type": "script",
