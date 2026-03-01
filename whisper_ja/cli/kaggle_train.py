@@ -255,12 +255,12 @@ def resolve_train_entrypoint(project_root: Path) -> list[str]:
     train_path = resolve_file_path("train.py", project_root)
     if train_path:
         print(f"✅ Using train entrypoint: {train_path}")
-        return [sys.executable, str(train_path)]
+        return [sys.executable, "-u", str(train_path)]
 
     module_train = project_root / "whisper_ja" / "cli" / "train.py"
     if module_train.is_file():
         print(f"✅ Using module train file: {module_train}")
-        return [sys.executable, str(module_train)]
+        return [sys.executable, "-u", str(module_train)]
 
     raise FileNotFoundError(
         "Cannot locate training entrypoint. Expected train.py or whisper_ja/cli/train.py."
@@ -302,7 +302,7 @@ def main() -> int:
         "--batch_size", str(env_int("BATCH_SIZE", 32)),
         "--num_train_epochs", str(env_int("NUM_EPOCHS", 3)),
         "--learning_rate", str(env_float("LEARNING_RATE", 1e-5)),
-        "--num_proc", str(env_int("NUM_PROC", 2)),
+        "--num_proc", str(env_int("NUM_PROC", 1)),
         "--output_dir", env("LORA_OUTPUT_DIR", "./output/whisper-tiny-ja-lora"),
         "--merged_output_dir", env("MERGED_OUTPUT_DIR", "./output/whisper-tiny-ja"),
         "--hub_adapter_model_id", env("HF_ADAPTER_REPO_ID", "dungca/whisper-tiny-ja-lora"),
@@ -329,6 +329,10 @@ def main() -> int:
     target_modules = env("LORA_TARGET_MODULES", "")
     if target_modules:
         command.extend(["--lora_target_modules", target_modules])
+
+    max_train_samples = env_int("MAX_TRAIN_SAMPLES", 0)
+    if max_train_samples > 0:
+        command.extend(["--max_train_samples", str(max_train_samples)])
 
     wandb_tags = env("WANDB_TAGS", "")
     if wandb_tags:

@@ -274,6 +274,7 @@ def parse_args():
 
     # Dataset
     parser.add_argument("--reazonspeech_size", type=str, help="tiny/small/medium/large/all")
+    parser.add_argument("--max_train_samples", type=int, help="Limit train samples (for smoke test/debug)")
     parser.add_argument("--max_eval_samples", type=int, help="Limit eval samples")
 
     # Training

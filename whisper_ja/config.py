@@ -16,6 +16,7 @@ class Config:
     # === Dataset ===
     # ReazonSpeech sizes: tiny(8.5h/600MB), small(100h/6GB), medium(1000h/65GB)
     reazonspeech_size: str = "small"
+    max_train_samples: int = 0
     eval_dataset_name: str = "japanese-asr/ja_asr.reazonspeech_test"
     max_eval_samples: int = 2000
 

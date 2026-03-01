@@ -3,6 +3,9 @@ Dataset loading & preprocessing.
 Cache xuống disk để training nhanh hơn.
 """
 
+import os
+import time
+
 from datasets import load_dataset
 
 
@@ -30,6 +33,7 @@ def prepare_sample(batch, feature_extractor, tokenizer):
 def load_and_prepare_train(config, feature_extractor, tokenizer):
     """Load ReazonSpeech + preprocess + cache to disk."""
     print(f"📥 Downloading ReazonSpeech '{config.reazonspeech_size}'...")
+    start = time.perf_counter()
 
     kwargs = {"trust_remote_code": True}
     if config.hf_token:
@@ -41,16 +45,28 @@ def load_and_prepare_train(config, feature_extractor, tokenizer):
         split="train",
         **kwargs,
     )
-    print(f"✅ Train downloaded: {len(dataset):,} samples")
+    print(f"✅ Train downloaded: {len(dataset):,} samples ({time.perf_counter() - start:.1f}s)")
+
+    if config.max_train_samples and len(dataset) > config.max_train_samples:
+        dataset = dataset.select(range(config.max_train_samples))
+        print(f"✂️  Train subset enabled: {len(dataset):,} samples")
+
+    num_proc = int(getattr(config, "num_proc", 1) or 1)
+    if os.getenv("KAGGLE_KERNEL_RUN_TYPE") and num_proc > 1:
+        # datasets+audio multiprocessing can hang on Kaggle runtime intermittently.
+        print(f"⚠️  Kaggle runtime detected; forcing num_proc=1 (was {num_proc}) for stability")
+        num_proc = 1
 
     print("⏳ Preprocessing train (cached to disk)...")
+    pre_start = time.perf_counter()
     dataset = dataset.map(
         lambda batch: prepare_sample(batch, feature_extractor, tokenizer),
         remove_columns=dataset.column_names,
-        num_proc=config.num_proc,
+        num_proc=num_proc if num_proc > 1 else None,
+        desc="preprocess-train",
     )
 
-    print(f"✅ Train ready: {len(dataset):,} samples")
+    print(f"✅ Train ready: {len(dataset):,} samples ({time.perf_counter() - pre_start:.1f}s)")
 
     return dataset
 
@@ -58,6 +74,7 @@ def load_and_prepare_train(config, feature_extractor, tokenizer):
 def load_and_prepare_eval(config, feature_extractor, tokenizer):
     """Load eval dataset + preprocess + cache to disk."""
     print(f"📥 Downloading eval dataset...")
+    start = time.perf_counter()
 
     kwargs = {}
     if config.hf_token:
@@ -72,15 +89,22 @@ def load_and_prepare_eval(config, feature_extractor, tokenizer):
     if config.max_eval_samples and len(dataset) > config.max_eval_samples:
         dataset = dataset.select(range(config.max_eval_samples))
 
-    print(f"✅ Eval downloaded: {len(dataset):,} samples")
+    print(f"✅ Eval downloaded: {len(dataset):,} samples ({time.perf_counter() - start:.1f}s)")
+
+    num_proc = int(getattr(config, "num_proc", 1) or 1)
+    if os.getenv("KAGGLE_KERNEL_RUN_TYPE") and num_proc > 1:
+        print(f"⚠️  Kaggle runtime detected; forcing num_proc=1 (was {num_proc}) for stability")
+        num_proc = 1
 
     print("⏳ Preprocessing eval...")
+    pre_start = time.perf_counter()
     dataset = dataset.map(
         lambda batch: prepare_sample(batch, feature_extractor, tokenizer),
         remove_columns=dataset.column_names,
-        num_proc=config.num_proc,
+        num_proc=num_proc if num_proc > 1 else None,
+        desc="preprocess-eval",
     )
 
-    print(f"✅ Train ready: {len(dataset):,} samples")
+    print(f"✅ Eval ready: {len(dataset):,} samples ({time.perf_counter() - pre_start:.1f}s)")
 
     return dataset

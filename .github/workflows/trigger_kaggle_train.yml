@@ -19,6 +19,14 @@ on:
         description: "Dataset size for validation/train trigger"
         required: false
         default: "small"
+      num_proc:
+        description: "CPU workers for preprocessing in Kaggle runtime"
+        required: false
+        default: "1"
+      max_train_samples:
+        description: "Limit train samples (0 = full dataset)"
+        required: false
+        default: "0"
 
 permissions:
   contents: read
@@ -28,6 +36,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       REAZONSPEECH_SIZE: ${{ inputs.reazonspeech_size || 'small' }}
+      NUM_PROC: ${{ inputs.num_proc || '1' }}
+      MAX_TRAIN_SAMPLES: ${{ inputs.max_train_samples || '0' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -149,6 +159,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TRAIN_REPO_URL: https://github.com/${{ github.repository }}.git
           TRAIN_REPO_REF: ${{ github.ref_name }}
+          REAZONSPEECH_SIZE: ${{ env.REAZONSPEECH_SIZE }}
+          NUM_PROC: ${{ env.NUM_PROC }}
+          MAX_TRAIN_SAMPLES: ${{ env.MAX_TRAIN_SAMPLES }}
         run: |
           python - <<'PY'
           import json
@@ -161,6 +174,9 @@ jobs:
               "GITHUB_TOKEN": os.environ.get("GITHUB_TOKEN", "").strip(),
               "TRAIN_REPO_URL": os.environ.get("TRAIN_REPO_URL", "").strip(),
               "TRAIN_REPO_REF": os.environ.get("TRAIN_REPO_REF", "").strip(),
+              "REAZONSPEECH_SIZE": os.environ.get("REAZONSPEECH_SIZE", "").strip(),
+              "NUM_PROC": os.environ.get("NUM_PROC", "").strip(),
+              "MAX_TRAIN_SAMPLES": os.environ.get("MAX_TRAIN_SAMPLES", "").strip(),
           }
           payload = {k: v for k, v in payload.items() if v}
 
@@ -177,6 +193,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TRAIN_REPO_URL: https://github.com/${{ github.repository }}.git
           TRAIN_REPO_REF: ${{ github.ref_name }}
+          REAZONSPEECH_SIZE: ${{ env.REAZONSPEECH_SIZE }}
+          NUM_PROC: ${{ env.NUM_PROC }}
+          MAX_TRAIN_SAMPLES: ${{ env.MAX_TRAIN_SAMPLES }}
         run: |
           python - <<'PY'
           import json
@@ -192,6 +211,9 @@ jobs:
               "GITHUB_TOKEN": os.environ.get("GITHUB_TOKEN", "").strip(),
               "TRAIN_REPO_URL": os.environ.get("TRAIN_REPO_URL", "").strip(),
               "TRAIN_REPO_REF": os.environ.get("TRAIN_REPO_REF", "").strip(),
+              "REAZONSPEECH_SIZE": os.environ.get("REAZONSPEECH_SIZE", "").strip(),
+              "NUM_PROC": os.environ.get("NUM_PROC", "").strip(),
+              "MAX_TRAIN_SAMPLES": os.environ.get("MAX_TRAIN_SAMPLES", "").strip(),
           }
           payload = {k: v for k, v in payload.items() if v}
 
@@ -238,6 +260,8 @@ jobs:
             echo "## CT Run Summary"
             echo "- Workflow: Trigger Kaggle LoRA Training"
             echo "- ReazonSpeech size: ${REAZONSPEECH_SIZE}"
+            echo "- num_proc: ${NUM_PROC}"
+            echo "- max_train_samples: ${MAX_TRAIN_SAMPLES}"
             echo "- Dataset validation report: training-data-validation-report"
             echo "- Kaggle kernel pushed from current commit."
             echo "- Kernel: https://www.kaggle.com/code/${KERNEL_ID}"
