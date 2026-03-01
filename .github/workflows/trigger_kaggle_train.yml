@@ -170,6 +170,42 @@ jobs:
           print(f"Created {path} with keys: {sorted(payload.keys())}")
           PY
 
+      - name: Inject runtime secrets into Kaggle script
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          WANDB_API_KEY: ${{ secrets.WANDB_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TRAIN_REPO_URL: https://github.com/${{ github.repository }}.git
+          TRAIN_REPO_REF: ${{ github.ref_name }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import re
+          from pathlib import Path
+
+          script_path = Path("whisper_ja/cli/kaggle_train.py")
+          source = script_path.read_text(encoding="utf-8")
+
+          payload = {
+              "HF_TOKEN": os.environ.get("HF_TOKEN", "").strip(),
+              "WANDB_API_KEY": os.environ.get("WANDB_API_KEY", "").strip(),
+              "GITHUB_TOKEN": os.environ.get("GITHUB_TOKEN", "").strip(),
+              "TRAIN_REPO_URL": os.environ.get("TRAIN_REPO_URL", "").strip(),
+              "TRAIN_REPO_REF": os.environ.get("TRAIN_REPO_REF", "").strip(),
+          }
+          payload = {k: v for k, v in payload.items() if v}
+
+          pattern = r"EMBEDDED_RUNTIME_SECRETS: dict\\[str, str\\] = \\{\\}"
+          replacement = f"EMBEDDED_RUNTIME_SECRETS: dict[str, str] = {json.dumps(payload, ensure_ascii=False)}"
+          patched, count = re.subn(pattern, replacement, source, count=1)
+          if count != 1:
+              raise SystemExit("Failed to locate EMBEDDED_RUNTIME_SECRETS placeholder for patching")
+
+          script_path.write_text(patched, encoding="utf-8")
+          print(f"Injected secret keys into script: {sorted(payload.keys())}")
+          PY
+
       - name: Push kernel and trigger run
         run: |
           set -euo pipefail
@@ -177,7 +213,9 @@ jobs:
 
       - name: Clean up runtime secret bundle
         if: always()
-        run: rm -f runtime_secrets.json
+        run: |
+          rm -f runtime_secrets.json
+          git checkout -- whisper_ja/cli/kaggle_train.py
 
       - name: Print kernel status
         run: |

@@ -19,6 +19,8 @@ from pathlib import Path
 _KAGGLE_SECRETS_CLIENT = None
 _KAGGLE_SECRETS_CACHE: dict[str, str] = {}
 _RUNTIME_SECRET_BUNDLE: dict[str, str] | None = None
+# This placeholder is patched by GitHub Actions before kaggle kernels push.
+EMBEDDED_RUNTIME_SECRETS: dict[str, str] = {}
 
 
 def _load_runtime_secret_bundle() -> dict[str, str]:
@@ -88,6 +90,11 @@ def env(name: str, default: str) -> str:
     value = os.environ.get(name, "").strip()
     if value:
         return value
+
+    embedded_value = EMBEDDED_RUNTIME_SECRETS.get(name, "").strip()
+    if embedded_value:
+        os.environ[name] = embedded_value
+        return embedded_value
 
     bundle = _load_runtime_secret_bundle()
     bundle_value = bundle.get(name, "").strip()
