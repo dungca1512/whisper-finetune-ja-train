@@ -1,0 +1,14 @@
+torch>=2.0
+transformers>=4.40
+datasets==2.21.0
+accelerate
+evaluate
+jiwer
+soundfile
+librosa
+wandb
+huggingface_hub
+peft
+ctranslate2
+faster-whisper
+tensorboard

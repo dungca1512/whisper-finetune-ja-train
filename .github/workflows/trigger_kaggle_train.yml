@@ -1,0 +1,129 @@
+name: Trigger Kaggle LoRA Training
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - train.py
+      - requirements.txt
+      - data_validation.py
+      - quality_gate.py
+      - kaggle_train.py
+      - kernel-metadata.json
+      - .kaggleignore
+      - whisper_ja/**
+  workflow_dispatch:
+    inputs:
+      reazonspeech_size:
+        description: "Dataset size for validation/train trigger"
+        required: false
+        default: "small"
+
+permissions:
+  contents: read
+
+jobs:
+  kaggle-train:
+    runs-on: ubuntu-latest
+    env:
+      REAZONSPEECH_SIZE: ${{ inputs.reazonspeech_size || 'small' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Validate kernel metadata
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path("kernel-metadata.json")
+          if not path.exists():
+              raise SystemExit("Missing kernel-metadata.json")
+
+          metadata = json.loads(path.read_text(encoding="utf-8"))
+          kernel_id = metadata.get("id", "")
+          if not kernel_id:
+              raise SystemExit("kernel-metadata.json missing field: id")
+          if "your_kaggle_username" in kernel_id:
+              raise SystemExit("Please replace placeholder in kernel-metadata.json id")
+          print(f"Kernel id: {kernel_id}")
+          PY
+
+      - name: Install validation + Kaggle dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install datasets==2.21.0 soundfile librosa kaggle
+
+      - name: Require HF token for data validation
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          if [ -z "${HF_TOKEN}" ]; then
+            echo "Missing secret HF_TOKEN in GitHub repo settings."
+            exit 1
+          fi
+
+      - name: Validate training dataset quality
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          python data_validation.py \
+            --dataset_name reazon-research/reazonspeech \
+            --dataset_config "${REAZONSPEECH_SIZE}" \
+            --split train \
+            --text_column transcription \
+            --audio_column audio \
+            --max_samples 200 \
+            --min_samples 100 \
+            --max_empty_text_ratio 0.05 \
+            --max_invalid_audio_ratio 0.05 \
+            --min_avg_duration_sec 0.5 \
+            --min_japanese_char_ratio 0.30 \
+            --trust_remote_code \
+            --output reports/data_validation_train.json \
+            --fail_on_check
+
+      - name: Upload validation report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: training-data-validation-report
+          path: reports/data_validation_train.json
+          if-no-files-found: warn
+
+      - name: Configure Kaggle API key
+        env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+        run: |
+          mkdir -p ~/.kaggle
+          cat > ~/.kaggle/kaggle.json <<JSON
+          {"username":"${KAGGLE_USERNAME}","key":"${KAGGLE_KEY}"}
+          JSON
+          chmod 600 ~/.kaggle/kaggle.json
+
+      - name: Push kernel and trigger run
+        run: kaggle kernels push -p .
+
+      - name: Print kernel status
+        run: |
+          KERNEL_ID="$(python -c 'import json; print(json.load(open("kernel-metadata.json", "r", encoding="utf-8"))["id"])')"
+          echo "Kernel pushed: ${KERNEL_ID}"
+          kaggle kernels status "${KERNEL_ID}" || true
+
+      - name: Write run summary
+        if: always()
+        run: |
+          {
+            echo "## CT Run Summary"
+            echo "- Workflow: Trigger Kaggle LoRA Training"
+            echo "- ReazonSpeech size: ${REAZONSPEECH_SIZE}"
+            echo "- Dataset validation report: training-data-validation-report"
+            echo "- Kaggle kernel pushed from current commit."
+          } >> "$GITHUB_STEP_SUMMARY"

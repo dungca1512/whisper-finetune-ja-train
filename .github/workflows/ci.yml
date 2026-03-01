@@ -1,0 +1,77 @@
+name: CI Checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install lightweight CI dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install datasets==2.21.0
+
+      - name: Syntax check (py_compile)
+        run: |
+          python - <<'PY'
+          import py_compile
+          from pathlib import Path
+
+          python_files = sorted(Path(".").rglob("*.py"))
+          if not python_files:
+              raise SystemExit("No Python files found")
+
+          for file_path in python_files:
+              py_compile.compile(str(file_path), doraise=True)
+          print(f"Compiled {len(python_files)} files successfully.")
+          PY
+
+      - name: Validate kernel metadata JSON
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path("kernel-metadata.json")
+          if not path.exists():
+              raise SystemExit("kernel-metadata.json missing")
+          json.loads(path.read_text(encoding="utf-8"))
+          print("kernel-metadata.json is valid JSON")
+          PY
+
+      - name: Validate eval dataset quality (lightweight)
+        run: |
+          python data_validation.py \
+            --dataset_name japanese-asr/ja_asr.reazonspeech_test \
+            --split test \
+            --text_column transcription \
+            --audio_column audio \
+            --max_samples 100 \
+            --min_samples 50 \
+            --skip_audio_checks \
+            --max_empty_text_ratio 0.10 \
+            --min_japanese_char_ratio 0.20 \
+            --output reports/data_validation_ci.json \
+            --fail_on_check
+
+      - name: Upload CI reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ci-reports
+          path: reports/
+          if-no-files-found: warn

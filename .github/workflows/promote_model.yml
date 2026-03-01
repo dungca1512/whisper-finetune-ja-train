@@ -1,0 +1,148 @@
+name: Promote Model To Demo
+
+on:
+  workflow_dispatch:
+    inputs:
+      model_repo_id:
+        description: "Merged model repo on Hugging Face Hub"
+        required: true
+        default: "dungca/whisper-tiny-ja"
+      adapter_repo_id:
+        description: "LoRA adapter repo on Hugging Face Hub"
+        required: false
+        default: "dungca/whisper-tiny-ja-lora"
+      candidate_eval_cer:
+        description: "Candidate eval CER"
+        required: true
+      baseline_eval_cer:
+        description: "Baseline eval CER (for comparison)"
+        required: true
+      max_cer_regression:
+        description: "Allowed CER regression"
+        required: false
+        default: "0.005"
+      max_absolute_cer:
+        description: "Maximum acceptable CER"
+        required: false
+        default: "0.30"
+      demo_repo:
+        description: "Target demo repo (owner/repo)"
+        required: true
+      event_type:
+        description: "repository_dispatch event type"
+        required: false
+        default: "asr-model-promoted"
+
+permissions:
+  contents: read
+
+jobs:
+  quality-gate:
+    runs-on: ubuntu-latest
+    outputs:
+      decision: ${{ steps.decision.outputs.decision }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Run quality gate
+        run: |
+          python quality_gate.py \
+            --candidate_cer "${{ inputs.candidate_eval_cer }}" \
+            --baseline_cer "${{ inputs.baseline_eval_cer }}" \
+            --max_cer_regression "${{ inputs.max_cer_regression }}" \
+            --max_absolute_cer "${{ inputs.max_absolute_cer }}" \
+            --model_repo_id "${{ inputs.model_repo_id }}" \
+            --adapter_repo_id "${{ inputs.adapter_repo_id }}" \
+            --require_baseline \
+            --output reports/quality_gate_report.json
+
+      - name: Resolve decision output
+        id: decision
+        run: |
+          python - <<'PY'
+          import json
+          import os
+
+          report = json.load(open("reports/quality_gate_report.json", "r", encoding="utf-8"))
+          decision = report["decision"]
+          print(f"Gate decision: {decision}")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:
+              f.write(f"decision={decision}\n")
+          PY
+
+      - name: Upload quality gate report
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-gate-report
+          path: reports/quality_gate_report.json
+          if-no-files-found: error
+
+      - name: Write gate summary
+        run: |
+          python - <<'PY'
+          import json
+          import os
+
+          report = json.load(open("reports/quality_gate_report.json", "r", encoding="utf-8"))
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as f:
+              f.write("## Quality Gate Result\n")
+              f.write(f"- Decision: `{report['decision']}`\n")
+              f.write(f"- Candidate CER: `{report['candidate_cer']}`\n")
+              f.write(f"- Baseline CER: `{report['baseline_cer']}`\n")
+          PY
+
+  dispatch-demo:
+    runs-on: ubuntu-latest
+    needs: [quality-gate]
+    if: needs.quality-gate.outputs.decision == 'promote'
+    steps:
+      - name: Trigger demo deployment via repository_dispatch
+        env:
+          GH_PAT: ${{ secrets.CROSS_REPO_PAT }}
+          DEMO_REPO: ${{ inputs.demo_repo }}
+          EVENT_TYPE: ${{ inputs.event_type }}
+          MODEL_REPO_ID: ${{ inputs.model_repo_id }}
+          ADAPTER_REPO_ID: ${{ inputs.adapter_repo_id }}
+          CANDIDATE_EVAL_CER: ${{ inputs.candidate_eval_cer }}
+          BASELINE_EVAL_CER: ${{ inputs.baseline_eval_cer }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          if [ -z "${GH_PAT}" ]; then
+            echo "Missing required secret CROSS_REPO_PAT"
+            exit 1
+          fi
+
+          cat > payload.json <<JSON
+          {
+            "event_type": "${EVENT_TYPE}",
+            "client_payload": {
+              "model_repo_id": "${MODEL_REPO_ID}",
+              "adapter_repo_id": "${ADAPTER_REPO_ID}",
+              "candidate_eval_cer": "${CANDIDATE_EVAL_CER}",
+              "baseline_eval_cer": "${BASELINE_EVAL_CER}",
+              "source_sha": "${SOURCE_SHA}"
+            }
+          }
+          JSON
+
+          curl -sS \
+            -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_PAT}" \
+            "https://api.github.com/repos/${DEMO_REPO}/dispatches" \
+            -d @payload.json
+
+      - name: Write dispatch summary
+        run: |
+          {
+            echo "## Demo Dispatch"
+            echo "- Target repo: \`${{ inputs.demo_repo }}\`"
+            echo "- Event type: \`${{ inputs.event_type }}\`"
+            echo "- Model: \`${{ inputs.model_repo_id }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

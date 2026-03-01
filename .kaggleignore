@@ -1,0 +1,10 @@
+.git/
+.github/
+__pycache__/
+*.pyc
+.env
+.env.*
+.DS_Store
+output/
+wandb/
+input/
