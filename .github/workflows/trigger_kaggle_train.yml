@@ -11,6 +11,7 @@ on:
       - kaggle_train.py
       - kernel-metadata.json
       - .kaggleignore
+      - .github/workflows/trigger_kaggle_train.yml
       - whisper_ja/**
   workflow_dispatch:
     inputs:
