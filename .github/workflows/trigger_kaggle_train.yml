@@ -102,28 +102,49 @@ jobs:
           KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
           KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
         run: |
+          if [ -z "${KAGGLE_USERNAME}" ] || [ -z "${KAGGLE_KEY}" ]; then
+            echo "Missing KAGGLE_USERNAME or KAGGLE_KEY secret."
+            exit 1
+          fi
           mkdir -p ~/.kaggle
           cat > ~/.kaggle/kaggle.json <<JSON
           {"username":"${KAGGLE_USERNAME}","key":"${KAGGLE_KEY}"}
           JSON
           chmod 600 ~/.kaggle/kaggle.json
 
+      - name: Validate kernel owner matches Kaggle username
+        env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+        run: |
+          KERNEL_ID="$(python -c 'import json; print(json.load(open("kernel-metadata.json", "r", encoding="utf-8"))["id"])')"
+          KERNEL_OWNER="${KERNEL_ID%%/*}"
+          if [ "${KERNEL_OWNER}" != "${KAGGLE_USERNAME}" ]; then
+            echo "kernel-metadata.json owner (${KERNEL_OWNER}) does not match KAGGLE_USERNAME secret (${KAGGLE_USERNAME})"
+            exit 1
+          fi
+          echo "Kernel owner check passed: ${KERNEL_OWNER}"
+
       - name: Push kernel and trigger run
-        run: kaggle kernels push -p .
+        run: |
+          set -euo pipefail
+          kaggle kernels push -p .
 
       - name: Print kernel status
         run: |
           KERNEL_ID="$(python -c 'import json; print(json.load(open("kernel-metadata.json", "r", encoding="utf-8"))["id"])')"
           echo "Kernel pushed: ${KERNEL_ID}"
-          kaggle kernels status "${KERNEL_ID}" || true
+          kaggle kernels status "${KERNEL_ID}"
 
       - name: Write run summary
         if: always()
         run: |
+          KERNEL_ID="$(python -c 'import json; print(json.load(open("kernel-metadata.json", "r", encoding="utf-8"))["id"])')"
           {
             echo "## CT Run Summary"
             echo "- Workflow: Trigger Kaggle LoRA Training"
             echo "- ReazonSpeech size: ${REAZONSPEECH_SIZE}"
             echo "- Dataset validation report: training-data-validation-report"
             echo "- Kaggle kernel pushed from current commit."
+            echo "- Kernel: https://www.kaggle.com/code/${KERNEL_ID}"
+            echo "- Versions: https://www.kaggle.com/code/${KERNEL_ID}/versions"
           } >> "$GITHUB_STEP_SUMMARY"
