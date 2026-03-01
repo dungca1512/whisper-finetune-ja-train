@@ -12,3 +12,4 @@ peft
 ctranslate2
 faster-whisper
 tensorboard
+kagglehub

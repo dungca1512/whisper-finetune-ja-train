@@ -267,6 +267,23 @@ def resolve_train_entrypoint(project_root: Path) -> list[str]:
     )
 
 
+def build_runtime_env(project_root: Path) -> dict[str, str]:
+    runtime_env = os.environ.copy()
+
+    # Force-load secrets from embedded bundle / runtime bundle / Kaggle Secrets
+    # so child processes (train.py) always receive them.
+    for key in ["HF_TOKEN", "WANDB_API_KEY", "GITHUB_TOKEN", "TRAIN_REPO_URL", "TRAIN_REPO_REF"]:
+        value = env(key, "")
+        if value:
+            runtime_env[key] = value
+
+    runtime_env["PYTHONPATH"] = f"{project_root}:{runtime_env.get('PYTHONPATH', '')}".rstrip(":")
+
+    available_keys = [k for k in ["HF_TOKEN", "WANDB_API_KEY", "GITHUB_TOKEN"] if runtime_env.get(k)]
+    print(f"✅ Runtime env keys available for train: {available_keys}")
+    return runtime_env
+
+
 def main() -> int:
     print(f"Working directory: {Path.cwd()}")
     print(f"Script location: {Path(__file__).resolve()}")
@@ -320,8 +337,7 @@ def main() -> int:
     if env("RUN_POST_TRAIN_TEST", "0") != "1":
         command.append("--skip_final_test")
 
-    runtime_env = os.environ.copy()
-    runtime_env["PYTHONPATH"] = f"{project_root}:{runtime_env.get('PYTHONPATH', '')}".rstrip(":")
+    runtime_env = build_runtime_env(project_root)
     run(command, cwd=str(project_root), env=runtime_env)
     return 0
 
