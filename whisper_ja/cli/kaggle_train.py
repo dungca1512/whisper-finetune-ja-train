@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+from subprocess import CalledProcessError
 from urllib.parse import quote
 from pathlib import Path
 
@@ -109,11 +110,24 @@ def bootstrap_project_from_git() -> Path:
         print(f"✅ Reusing cloned repo: {target_dir}")
         return target_dir
 
+    if target_dir.exists():
+        run(["rm", "-rf", str(target_dir)])
+
     auth_url = authenticated_repo_url(repo_url, token)
-    run(
-        ["git", "clone", "--depth", "1", "--branch", repo_ref, auth_url, str(target_dir)],
-        display_cmd=f"git clone --depth 1 --branch {repo_ref} <repo_url> {target_dir}",
-    )
+    try:
+        run(
+            ["git", "clone", "--depth", "1", "--branch", repo_ref, auth_url, str(target_dir)],
+            display_cmd=f"git clone --depth 1 --branch {repo_ref} <repo_url> {target_dir}",
+        )
+    except CalledProcessError as exc:
+        if "github.com" in repo_url and not token:
+            raise RuntimeError(
+                "Cannot clone TRAIN_REPO_URL from GitHub without credentials. "
+                "If the repo is private, add Kaggle Secret GITHUB_TOKEN "
+                "(classic PAT with repo read scope or fine-grained token with contents read)."
+            ) from exc
+        raise
+
     return target_dir
 
 
