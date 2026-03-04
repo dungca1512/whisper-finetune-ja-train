@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 class Config:
     # === Model ===
     # tiny/base/small/medium/large-v2/large-v3/turbo
-    model_size: str = "tiny"
+    model_size: str = "small"
     # Optional override: để rỗng để tự build từ model_size
     model_name: str = ""
     language: str = "ja"
@@ -28,9 +28,9 @@ class Config:
 
     # === Training ===
     # output_dir lưu adapter LoRA (nhẹ, nhanh upload/checkpoint)
-    output_dir: str = "./output/whisper-tiny-ja-lora"
+    output_dir: str = f"./output/whisper-{model_size}-ja-lora"
     # merged_output_dir lưu full weights sau khi merge LoRA để deploy/export
-    merged_output_dir: str = "./output/whisper-tiny-ja"
+    merged_output_dir: str = f"./output/whisper-{model_size}-ja"
     save_merged_model: bool = True
     num_train_epochs: int = 3
     batch_size: int = 64           # RTX 3090/4090: 64, T4: 32
@@ -56,7 +56,7 @@ class Config:
 
     # === W&B ===
     use_wandb: bool = True
-    wandb_project: str = "whisper-tiny-ja"
+    wandb_project: str = f"whisper-{model_size}-ja"
     wandb_key: str = ""  # Paste key hoặc set env WANDB_API_KEY
     wandb_tags: list[str] = field(default_factory=list)
 
@@ -65,14 +65,14 @@ class Config:
 
     # === Export ===
     export_ct2: bool = True
-    ct2_output_dir: str = "./output/whisper-tiny-ja-ct2"
+    ct2_output_dir: str = f"./output/whisper-{model_size}-ja-ct2"
     ct2_quantization: str = "int8"
 
     # === Push to Hub ===
     push_to_hub: bool = False
     push_merged_to_hub: bool = True
-    hub_model_id: str = "dungca/whisper-tiny-ja"
-    hub_adapter_model_id: str = "dungca/whisper-tiny-ja-lora"
+    hub_model_id: str = f"dungca/whisper-{model_size}-ja"
+    hub_adapter_model_id: str = f"dungca/whisper-{model_size}-ja-lora"
 
     def __post_init__(self):
         size = self.model_size.strip()
@@ -87,7 +87,7 @@ class Config:
 
         # Chỉ auto-đổi các giá trị mặc định đang hardcode tiny.
         # Nếu bạn set custom value trong Config/CLI thì sẽ được giữ nguyên.
-        if self.output_dir == "./output/whisper-tiny-ja-lora":
+        if self.output_dir == f"./output/whisper-tiny-ja-lora":
             self.output_dir = f"./output/{model_tag}-lora"
         if self.merged_output_dir == "./output/whisper-tiny-ja":
             self.merged_output_dir = f"./output/{model_tag}"
