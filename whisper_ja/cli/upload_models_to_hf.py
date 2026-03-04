@@ -8,8 +8,9 @@ Usage:
 
 Optional:
   python upload_models_to_hf.py --private
-  python upload_models_to_hf.py --hf_repo_id dungca/whisper-tiny-ja
-  python upload_models_to_hf.py --ct2_repo_id dungca/whisper-tiny-ja-ct2-int8
+  python upload_models_to_hf.py --model_size small
+  python upload_models_to_hf.py --hf_repo_id dungca/whisper-small-ja
+  python upload_models_to_hf.py --ct2_repo_id dungca/whisper-small-ja-ct2-int8
 """
 
 from __future__ import annotations
@@ -23,10 +24,6 @@ from huggingface_hub import HfApi
 from huggingface_hub.utils import HfHubHTTPError
 
 
-DEFAULT_HF_DIR = Path("./output/whisper-tiny-ja")
-DEFAULT_CT2_DIR = Path("./output/whisper-tiny-ja-ct2")
-
-
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Upload Whisper finetuned models (HF + CT2) to Hugging Face Hub."
@@ -37,24 +34,34 @@ def parse_args() -> argparse.Namespace:
         help="Hugging Face token (defaults to HF_TOKEN env var).",
     )
     parser.add_argument(
+        "--model_size",
+        default=os.environ.get("MODEL_SIZE", "tiny"),
+        help="Whisper size tag used for auto defaults (tiny/base/small/medium/large-v3/turbo).",
+    )
+    parser.add_argument(
+        "--repo_owner",
+        default=os.environ.get("HF_REPO_OWNER", "dungca"),
+        help="HF namespace used for auto repo-id defaults.",
+    )
+    parser.add_argument(
         "--hf_dir",
-        default=str(DEFAULT_HF_DIR),
-        help="Local Transformers model directory.",
+        default=None,
+        help="Local Transformers model directory. Default: ./output/whisper-<model_size>-ja",
     )
     parser.add_argument(
         "--ct2_dir",
-        default=str(DEFAULT_CT2_DIR),
-        help="Local CTranslate2 model directory.",
+        default=None,
+        help="Local CTranslate2 model directory. Default: ./output/whisper-<model_size>-ja-ct2",
     )
     parser.add_argument(
         "--hf_repo_id",
-        default="dungca/whisper-tiny-ja",
-        help="Target HF repo for Transformers model.",
+        default=None,
+        help="Target HF repo for Transformers model. Default: <repo_owner>/whisper-<model_size>-ja",
     )
     parser.add_argument(
         "--ct2_repo_id",
-        default="dungca/whisper-tiny-ja-ct2-int8",
-        help="Target HF repo for CTranslate2 model.",
+        default=None,
+        help="Target HF repo for CTranslate2 model. Default: <repo_owner>/whisper-<model_size>-ja-ct2-int8",
     )
     parser.add_argument(
         "--private",
@@ -105,8 +112,16 @@ def main() -> int:
         print("Error: missing token. Set HF_TOKEN or pass --token.", file=sys.stderr)
         return 1
 
-    hf_dir = Path(args.hf_dir)
-    ct2_dir = Path(args.ct2_dir)
+    model_size = args.model_size.strip()
+    if not model_size:
+        print("Error: --model_size cannot be empty.", file=sys.stderr)
+        return 1
+    model_tag = f"whisper-{model_size}-ja"
+    hf_repo_id = args.hf_repo_id or f"{args.repo_owner}/{model_tag}"
+    ct2_repo_id = args.ct2_repo_id or f"{args.repo_owner}/{model_tag}-ct2-int8"
+
+    hf_dir = Path(args.hf_dir or f"./output/{model_tag}")
+    ct2_dir = Path(args.ct2_dir or f"./output/{model_tag}-ct2")
 
     if args.skip_hf and args.skip_ct2:
         print("Nothing to do: both --skip_hf and --skip_ct2 were set.")
@@ -132,9 +147,9 @@ def main() -> int:
             upload_model_folder(
                 api=api,
                 folder_path=hf_dir,
-                repo_id=args.hf_repo_id,
+                repo_id=hf_repo_id,
                 private=args.private,
-                commit_message="Upload finetuned Whisper Tiny JA (Transformers format)",
+                commit_message=f"Upload finetuned {model_tag} (Transformers format)",
                 ignore_patterns=[
                     "checkpoint-*",
                     "logs/*",
@@ -148,9 +163,9 @@ def main() -> int:
             upload_model_folder(
                 api=api,
                 folder_path=ct2_dir,
-                repo_id=args.ct2_repo_id,
+                repo_id=ct2_repo_id,
                 private=args.private,
-                commit_message="Upload finetuned Whisper Tiny JA (CTranslate2 INT8 format)",
+                commit_message=f"Upload finetuned {model_tag} (CTranslate2 INT8 format)",
             )
 
     except HfHubHTTPError as exc:

@@ -77,7 +77,7 @@ asr-ja-demo/
 ```python
 from transformers import pipeline
 
-MODEL_ID = "dungca/whisper-tiny-ja"
+MODEL_ID = "dungca/whisper-<model_size>-ja"
 asr = pipeline("automatic-speech-recognition", model=MODEL_ID)
 ```
 
@@ -85,8 +85,8 @@ asr = pipeline("automatic-speech-recognition", model=MODEL_ID)
 
 Khuyến nghị tách 2 model repo trên HF:
 
-- `dungca/whisper-tiny-ja-lora` (adapter)
-- `dungca/whisper-tiny-ja` (merged full model cho demo)
+- `dungca/whisper-<model_size>-ja-lora` (adapter)
+- `dungca/whisper-<model_size>-ja` (merged full model cho demo)
 
 Demo repo luôn dùng repo merged để tránh phụ thuộc logic load adapter.
 

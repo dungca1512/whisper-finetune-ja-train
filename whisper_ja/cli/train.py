@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 =============================================================================
-Whisper Tiny - Finetune for Japanese ASR
+Whisper - Finetune for Japanese ASR
 =============================================================================
 
 Usage:
@@ -134,7 +134,8 @@ def push_folder_to_hub(folder_path, repo_id, token, private=False):
 def train(config, args):
     """Full training pipeline."""
     print("=" * 60)
-    print("🎌 Whisper Tiny — Japanese ASR LoRA Training")
+    print("🎌 Whisper — Japanese ASR LoRA Training")
+    print(f"   Model: {config.model_name}")
     print(f"   Mode: {'LoRA adapters' if config.use_lora else 'Full finetune'}")
     print("=" * 60)
 
@@ -264,7 +265,7 @@ def train(config, args):
 
 def parse_args():
     """Parse CLI arguments."""
-    parser = argparse.ArgumentParser(description="Finetune Whisper Tiny for Japanese ASR")
+    parser = argparse.ArgumentParser(description="Finetune Whisper for Japanese ASR")
 
     # Actions
     parser.add_argument("--export_only", action="store_true", help="Export existing model to CT2")
@@ -276,6 +277,18 @@ def parse_args():
     parser.add_argument("--reazonspeech_size", type=str, help="tiny/small/medium/large/all")
     parser.add_argument("--max_train_samples", type=int, help="Limit train samples (for smoke test/debug)")
     parser.add_argument("--max_eval_samples", type=int, help="Limit eval samples")
+
+    # Model
+    parser.add_argument(
+        "--model_size",
+        type=str,
+        help="Whisper size tag, e.g. tiny/base/small/medium/large-v3/turbo",
+    )
+    parser.add_argument(
+        "--model_name",
+        type=str,
+        help="Base model id, e.g. openai/whisper-small",
+    )
 
     # Training
     parser.add_argument("--batch_size", type=int, help="Training batch size")
@@ -294,8 +307,10 @@ def parse_args():
     parser.add_argument("--hf_token", type=str, help="HuggingFace token")
     parser.add_argument("--wandb_key", type=str, help="W&B API key")
     parser.add_argument("--wandb_tags", type=str, help="Comma-separated W&B tags")
+    parser.add_argument("--wandb_project", type=str, help="W&B project name")
     parser.add_argument("--no_wandb", action="store_true", help="Disable W&B")
     parser.add_argument("--num_proc", type=int, help="CPU cores for preprocessing")
+    parser.add_argument("--ct2_output_dir", type=str, help="CTranslate2 export output directory")
     parser.add_argument("--push_to_hub", action="store_true", help="Upload artifacts to HF Hub")
     parser.add_argument("--hub_model_id", type=str, help="HF repo id for deploy (merged/full) model")
     parser.add_argument("--hub_adapter_model_id", type=str, help="HF repo id for LoRA adapter model")
@@ -343,6 +358,31 @@ def main():
         config.wandb_tags = [tag.strip() for tag in args.wandb_tags.split(",") if tag.strip()]
     if args.skip_final_test:
         config.run_post_train_test = False
+
+    # Keep all auto-generated names/paths in sync when model_size is explicitly set via CLI.
+    if args.model_size:
+        model_tag = f"whisper-{config.model_size}-ja"
+
+        if args.model_name is None:
+            config.model_name = f"openai/whisper-{config.model_size}"
+        if args.output_dir is None:
+            config.output_dir = f"./output/{model_tag}-lora"
+        if args.merged_output_dir is None:
+            config.merged_output_dir = f"./output/{model_tag}"
+        if args.wandb_project is None:
+            config.wandb_project = model_tag
+        if args.ct2_output_dir is None:
+            config.ct2_output_dir = f"./output/{model_tag}-ct2"
+        if args.hub_model_id is None:
+            owner = config.hub_model_id.split("/", 1)[0] if "/" in config.hub_model_id else "dungca"
+            config.hub_model_id = f"{owner}/{model_tag}"
+        if args.hub_adapter_model_id is None:
+            owner = (
+                config.hub_adapter_model_id.split("/", 1)[0]
+                if "/" in config.hub_adapter_model_id
+                else "dungca"
+            )
+            config.hub_adapter_model_id = f"{owner}/{model_tag}-lora"
 
     # Actions
     if args.export_only:

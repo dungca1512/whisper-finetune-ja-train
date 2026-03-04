@@ -1,5 +1,5 @@
 """
-Configuration for Whisper Tiny Japanese finetune.
+Configuration for Whisper Japanese finetune.
 Chỉnh sửa ở đây trước khi chạy.
 """
 
@@ -9,7 +9,10 @@ from dataclasses import dataclass, field
 @dataclass
 class Config:
     # === Model ===
-    model_name: str = "openai/whisper-tiny"
+    # tiny/base/small/medium/large-v2/large-v3/turbo
+    model_size: str = "tiny"
+    # Optional override: để rỗng để tự build từ model_size
+    model_name: str = ""
     language: str = "ja"
     task: str = "transcribe"
 
@@ -70,3 +73,29 @@ class Config:
     push_merged_to_hub: bool = True
     hub_model_id: str = "dungca/whisper-tiny-ja"
     hub_adapter_model_id: str = "dungca/whisper-tiny-ja-lora"
+
+    def __post_init__(self):
+        size = self.model_size.strip()
+        if not size:
+            raise ValueError("model_size cannot be empty")
+        self.model_size = size
+
+        model_tag = f"whisper-{self.model_size}-ja"
+
+        if not self.model_name:
+            self.model_name = f"openai/whisper-{self.model_size}"
+
+        # Chỉ auto-đổi các giá trị mặc định đang hardcode tiny.
+        # Nếu bạn set custom value trong Config/CLI thì sẽ được giữ nguyên.
+        if self.output_dir == "./output/whisper-tiny-ja-lora":
+            self.output_dir = f"./output/{model_tag}-lora"
+        if self.merged_output_dir == "./output/whisper-tiny-ja":
+            self.merged_output_dir = f"./output/{model_tag}"
+        if self.wandb_project == "whisper-tiny-ja":
+            self.wandb_project = model_tag
+        if self.ct2_output_dir == "./output/whisper-tiny-ja-ct2":
+            self.ct2_output_dir = f"./output/{model_tag}-ct2"
+        if self.hub_model_id == "dungca/whisper-tiny-ja":
+            self.hub_model_id = f"dungca/{model_tag}"
+        if self.hub_adapter_model_id == "dungca/whisper-tiny-ja-lora":
+            self.hub_adapter_model_id = f"dungca/{model_tag}-lora"

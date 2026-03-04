@@ -296,22 +296,33 @@ def main() -> int:
 
     install_dependencies(project_root)
 
+    model_size = env("MODEL_SIZE", "tiny")
+    model_tag = f"whisper-{model_size}-ja"
+    repo_owner = env("HF_REPO_OWNER", "dungca")
+    model_name = env("MODEL_NAME", "")
+
     command = [
         *resolve_train_entrypoint(project_root),
+        "--model_size", model_size,
         "--reazonspeech_size", env("REAZONSPEECH_SIZE", "small"),
         "--batch_size", str(env_int("BATCH_SIZE", 32)),
         "--num_train_epochs", str(env_int("NUM_EPOCHS", 3)),
         "--learning_rate", str(env_float("LEARNING_RATE", 1e-5)),
         "--num_proc", str(env_int("NUM_PROC", 1)),
-        "--output_dir", env("LORA_OUTPUT_DIR", "./output/whisper-tiny-ja-lora"),
-        "--merged_output_dir", env("MERGED_OUTPUT_DIR", "./output/whisper-tiny-ja"),
-        "--hub_adapter_model_id", env("HF_ADAPTER_REPO_ID", "dungca/whisper-tiny-ja-lora"),
-        "--hub_model_id", env("HF_MERGED_REPO_ID", "dungca/whisper-tiny-ja"),
+        "--output_dir", env("LORA_OUTPUT_DIR", f"./output/{model_tag}-lora"),
+        "--merged_output_dir", env("MERGED_OUTPUT_DIR", f"./output/{model_tag}"),
+        "--ct2_output_dir", env("CT2_OUTPUT_DIR", f"./output/{model_tag}-ct2"),
+        "--wandb_project", env("WANDB_PROJECT", model_tag),
+        "--hub_adapter_model_id", env("HF_ADAPTER_REPO_ID", f"{repo_owner}/{model_tag}-lora"),
+        "--hub_model_id", env("HF_MERGED_REPO_ID", f"{repo_owner}/{model_tag}"),
         "--lora_r", str(env_int("LORA_R", 16)),
         "--lora_alpha", str(env_int("LORA_ALPHA", 32)),
         "--lora_dropout", str(env_float("LORA_DROPOUT", 0.05)),
         "--push_to_hub",
     ]
+
+    if model_name:
+        command.extend(["--model_name", model_name])
 
     # Enable W&B by default; disable explicitly with ENABLE_WANDB=0.
     if not env_bool("ENABLE_WANDB", True):
