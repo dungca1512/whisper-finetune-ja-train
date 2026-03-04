@@ -6,11 +6,16 @@ Chỉnh sửa ở đây trước khi chạy.
 from dataclasses import dataclass, field
 
 
+DEFAULT_MODEL_SIZE = "small"
+DEFAULT_REAZONSPEECH_SIZE = "small"
+DEFAULT_HF_REPO_OWNER = "dungca"
+
+
 @dataclass
 class Config:
     # === Model ===
     # tiny/base/small/medium/large-v2/large-v3/turbo
-    model_size: str = "small"
+    model_size: str = DEFAULT_MODEL_SIZE
     # Optional override: để rỗng để tự build từ model_size
     model_name: str = ""
     language: str = "ja"
@@ -18,19 +23,20 @@ class Config:
 
     # === Dataset ===
     # ReazonSpeech sizes: tiny(8.5h/600MB), small(100h/6GB), medium(1000h/65GB)
-    reazonspeech_size: str = "small"
+    reazonspeech_size: str = DEFAULT_REAZONSPEECH_SIZE
     max_train_samples: int = 0
     eval_dataset_name: str = "japanese-asr/ja_asr.reazonspeech_test"
     max_eval_samples: int = 2000
 
     # === HuggingFace ===
-    hf_token: str = ""  # Paste token hoặc set env HF_TOKEN
+    hf_token: str = ""  # Keep empty; read from env/secret HF_TOKEN at runtime.
+    hf_repo_owner: str = DEFAULT_HF_REPO_OWNER
 
     # === Training ===
     # output_dir lưu adapter LoRA (nhẹ, nhanh upload/checkpoint)
-    output_dir: str = f"./output/whisper-{model_size}-ja-lora"
+    output_dir: str = ""
     # merged_output_dir lưu full weights sau khi merge LoRA để deploy/export
-    merged_output_dir: str = f"./output/whisper-{model_size}-ja"
+    merged_output_dir: str = ""
     save_merged_model: bool = True
     num_train_epochs: int = 3
     batch_size: int = 64           # RTX 3090/4090: 64, T4: 32
@@ -56,8 +62,8 @@ class Config:
 
     # === W&B ===
     use_wandb: bool = True
-    wandb_project: str = f"whisper-{model_size}-ja"
-    wandb_key: str = ""  # Paste key hoặc set env WANDB_API_KEY
+    wandb_project: str = ""
+    wandb_key: str = ""  # Keep empty; read from env/secret WANDB_API_KEY at runtime.
     wandb_tags: list[str] = field(default_factory=list)
 
     # === Preprocessing ===
@@ -65,14 +71,14 @@ class Config:
 
     # === Export ===
     export_ct2: bool = True
-    ct2_output_dir: str = f"./output/whisper-{model_size}-ja-ct2"
+    ct2_output_dir: str = ""
     ct2_quantization: str = "int8"
 
     # === Push to Hub ===
     push_to_hub: bool = False
     push_merged_to_hub: bool = True
-    hub_model_id: str = f"dungca/whisper-{model_size}-ja"
-    hub_adapter_model_id: str = f"dungca/whisper-{model_size}-ja-lora"
+    hub_model_id: str = ""
+    hub_adapter_model_id: str = ""
 
     def __post_init__(self):
         size = self.model_size.strip()
@@ -80,22 +86,54 @@ class Config:
             raise ValueError("model_size cannot be empty")
         self.model_size = size
 
+        repo_owner = self.hf_repo_owner.strip()
+        if not repo_owner:
+            repo_owner = DEFAULT_HF_REPO_OWNER
+        self.hf_repo_owner = repo_owner
+
         model_tag = f"whisper-{self.model_size}-ja"
 
-        if not self.model_name:
+        legacy_model_names = {
+            f"openai/whisper-{DEFAULT_MODEL_SIZE}",
+            "openai/whisper-tiny",
+        }
+        if not self.model_name or self.model_name in legacy_model_names:
             self.model_name = f"openai/whisper-{self.model_size}"
 
-        # Chỉ auto-đổi các giá trị mặc định đang hardcode tiny.
-        # Nếu bạn set custom value trong Config/CLI thì sẽ được giữ nguyên.
-        if self.output_dir == f"./output/whisper-tiny-ja-lora":
+        legacy_output_dirs = {
+            f"./output/whisper-{DEFAULT_MODEL_SIZE}-ja-lora",
+            "./output/whisper-tiny-ja-lora",
+        }
+        if not self.output_dir or self.output_dir in legacy_output_dirs:
             self.output_dir = f"./output/{model_tag}-lora"
-        if self.merged_output_dir == "./output/whisper-tiny-ja":
+        legacy_merged_dirs = {
+            f"./output/whisper-{DEFAULT_MODEL_SIZE}-ja",
+            "./output/whisper-tiny-ja",
+        }
+        if not self.merged_output_dir or self.merged_output_dir in legacy_merged_dirs:
             self.merged_output_dir = f"./output/{model_tag}"
-        if self.wandb_project == "whisper-tiny-ja":
+        legacy_wandb_projects = {
+            f"whisper-{DEFAULT_MODEL_SIZE}-ja",
+            "whisper-tiny-ja",
+        }
+        if not self.wandb_project or self.wandb_project in legacy_wandb_projects:
             self.wandb_project = model_tag
-        if self.ct2_output_dir == "./output/whisper-tiny-ja-ct2":
+        legacy_ct2_dirs = {
+            f"./output/whisper-{DEFAULT_MODEL_SIZE}-ja-ct2",
+            "./output/whisper-tiny-ja-ct2",
+        }
+        if not self.ct2_output_dir or self.ct2_output_dir in legacy_ct2_dirs:
             self.ct2_output_dir = f"./output/{model_tag}-ct2"
-        if self.hub_model_id == "dungca/whisper-tiny-ja":
-            self.hub_model_id = f"dungca/{model_tag}"
-        if self.hub_adapter_model_id == "dungca/whisper-tiny-ja-lora":
-            self.hub_adapter_model_id = f"dungca/{model_tag}-lora"
+        legacy_hub_model_ids = {
+            f"{DEFAULT_HF_REPO_OWNER}/whisper-{DEFAULT_MODEL_SIZE}-ja",
+            f"{DEFAULT_HF_REPO_OWNER}/whisper-tiny-ja",
+        }
+        if not self.hub_model_id or self.hub_model_id in legacy_hub_model_ids:
+            self.hub_model_id = f"{self.hf_repo_owner}/{model_tag}"
+
+        legacy_hub_adapter_ids = {
+            f"{DEFAULT_HF_REPO_OWNER}/whisper-{DEFAULT_MODEL_SIZE}-ja-lora",
+            f"{DEFAULT_HF_REPO_OWNER}/whisper-tiny-ja-lora",
+        }
+        if not self.hub_adapter_model_id or self.hub_adapter_model_id in legacy_hub_adapter_ids:
+            self.hub_adapter_model_id = f"{self.hf_repo_owner}/{model_tag}-lora"

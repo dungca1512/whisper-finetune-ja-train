@@ -9,8 +9,8 @@ Usage:
 Optional:
   python upload_models_to_hf.py --private
   python upload_models_to_hf.py --model_size small
-  python upload_models_to_hf.py --hf_repo_id dungca/whisper-small-ja
-  python upload_models_to_hf.py --ct2_repo_id dungca/whisper-small-ja-ct2-int8
+  python upload_models_to_hf.py --hf_repo_id <repo_owner>/whisper-small-ja
+  python upload_models_to_hf.py --ct2_repo_id <repo_owner>/whisper-small-ja-ct2-int8
 """
 
 from __future__ import annotations
@@ -22,6 +22,8 @@ from pathlib import Path
 
 from huggingface_hub import HfApi
 from huggingface_hub.utils import HfHubHTTPError
+
+from whisper_ja.config import Config
 
 
 def parse_args() -> argparse.Namespace:
@@ -35,12 +37,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--model_size",
-        default=os.environ.get("MODEL_SIZE", "tiny"),
-        help="Whisper size tag used for auto defaults (tiny/base/small/medium/large-v3/turbo).",
+        default=Config().model_size,
+        help="Whisper size tag used for auto defaults (priority: --model_size > Config.model_size).",
     )
     parser.add_argument(
         "--repo_owner",
-        default=os.environ.get("HF_REPO_OWNER", "dungca"),
+        default=Config().hf_repo_owner,
         help="HF namespace used for auto repo-id defaults.",
     )
     parser.add_argument(

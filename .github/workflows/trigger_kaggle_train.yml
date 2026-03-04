@@ -156,12 +156,6 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           WANDB_API_KEY: ${{ secrets.WANDB_API_KEY }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TRAIN_REPO_URL: https://github.com/${{ github.repository }}.git
-          TRAIN_REPO_REF: ${{ github.ref_name }}
-          REAZONSPEECH_SIZE: ${{ env.REAZONSPEECH_SIZE }}
-          NUM_PROC: ${{ env.NUM_PROC }}
-          MAX_TRAIN_SAMPLES: ${{ env.MAX_TRAIN_SAMPLES }}
         run: |
           python - <<'PY'
           import json
@@ -171,12 +165,6 @@ jobs:
           payload = {
               "HF_TOKEN": os.environ.get("HF_TOKEN", "").strip(),
               "WANDB_API_KEY": os.environ.get("WANDB_API_KEY", "").strip(),
-              "GITHUB_TOKEN": os.environ.get("GITHUB_TOKEN", "").strip(),
-              "TRAIN_REPO_URL": os.environ.get("TRAIN_REPO_URL", "").strip(),
-              "TRAIN_REPO_REF": os.environ.get("TRAIN_REPO_REF", "").strip(),
-              "REAZONSPEECH_SIZE": os.environ.get("REAZONSPEECH_SIZE", "").strip(),
-              "NUM_PROC": os.environ.get("NUM_PROC", "").strip(),
-              "MAX_TRAIN_SAMPLES": os.environ.get("MAX_TRAIN_SAMPLES", "").strip(),
           }
           payload = {k: v for k, v in payload.items() if v}
 
@@ -190,12 +178,6 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           WANDB_API_KEY: ${{ secrets.WANDB_API_KEY }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TRAIN_REPO_URL: https://github.com/${{ github.repository }}.git
-          TRAIN_REPO_REF: ${{ github.ref_name }}
-          REAZONSPEECH_SIZE: ${{ env.REAZONSPEECH_SIZE }}
-          NUM_PROC: ${{ env.NUM_PROC }}
-          MAX_TRAIN_SAMPLES: ${{ env.MAX_TRAIN_SAMPLES }}
         run: |
           python - <<'PY'
           import json
@@ -208,12 +190,6 @@ jobs:
           payload = {
               "HF_TOKEN": os.environ.get("HF_TOKEN", "").strip(),
               "WANDB_API_KEY": os.environ.get("WANDB_API_KEY", "").strip(),
-              "GITHUB_TOKEN": os.environ.get("GITHUB_TOKEN", "").strip(),
-              "TRAIN_REPO_URL": os.environ.get("TRAIN_REPO_URL", "").strip(),
-              "TRAIN_REPO_REF": os.environ.get("TRAIN_REPO_REF", "").strip(),
-              "REAZONSPEECH_SIZE": os.environ.get("REAZONSPEECH_SIZE", "").strip(),
-              "NUM_PROC": os.environ.get("NUM_PROC", "").strip(),
-              "MAX_TRAIN_SAMPLES": os.environ.get("MAX_TRAIN_SAMPLES", "").strip(),
           }
           payload = {k: v for k, v in payload.items() if v}
 

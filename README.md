@@ -8,8 +8,9 @@ Repo này là phần training private cho Japanese ASR. Mặc định dùng LoRA
 # 1) Setup
 bash setup.sh
 
-# 2) Set token (bắt buộc nếu cần dataset gated hoặc push Hub)
-export HF_TOKEN=hf_xxxxx
+# 2) Tạo env local
+cp .env.example .env
+# chỉ điền secrets trong .env (HF_TOKEN, WANDB_API_KEY, ...)
 
 # 3) Train LoRA (default)
 python train.py --reazonspeech_size small --batch_size 32 --num_train_epochs 3 --no_wandb
@@ -36,11 +37,18 @@ Gợi ý ghi model card trên HF:
 ## LoRA Defaults
 
 - LoRA được bật mặc định (`use_lora=True` trong `whisper_ja/config.py`).
-- Đổi size model ở `model_size` trong `whisper_ja/config.py` (ví dụ: `tiny`, `small`, `medium`, `large-v3`).
+- Đổi size model trong `whisper_ja/config.py` hoặc override tạm bằng CLI `--model_size`.
 - Sau khi train, script sẽ lưu:
   - Adapter: `output/whisper-<model_size>-ja-lora`
   - Merged full model (để deploy): `output/whisper-<model_size>-ja`
   - CT2 export: `output/whisper-<model_size>-ja-ct2`
+
+### Config Policy
+
+- `.env`:
+  - Chỉ giữ token/secret: `HF_TOKEN`, `WANDB_API_KEY`, `KAGGLE_KEY`, `GITHUB_TOKEN`.
+- `whisper_ja/config.py`:
+  - Giữ toàn bộ non-secret: model/repo identity, siêu tham số train/eval/data, output/merged/ct2 path.
 
 CLI thường dùng:
 
@@ -53,8 +61,8 @@ python train.py --wandb_tags kaggle,lora,reazonspeech-small
 
 # Bật push Hub cho cả adapter + merged model
 python train.py --push_to_hub \
-  --hub_adapter_model_id dungca/whisper-<model_size>-ja-lora \
-  --hub_model_id dungca/whisper-<model_size>-ja
+  --hub_adapter_model_id <repo_owner>/whisper-<model_size>-ja-lora \
+  --hub_model_id <repo_owner>/whisper-<model_size>-ja
 
 # Nếu cần thử full finetune
 python train.py --full_finetune
@@ -104,16 +112,12 @@ Bạn cần:
 4. Nếu muốn fallback bằng Kaggle UI (tuỳ chọn), bạn vẫn có thể thêm:
    - `HF_TOKEN`
    - `WANDB_API_KEY`
-   - `TRAIN_REPO_URL`
-   - `TRAIN_REPO_REF`
-   - `GITHUB_TOKEN`
    theo đường dẫn `Edit Notebook` -> `Add-ons` -> `Secrets`.
 
 Khi push lên `main`, workflow sẽ `kaggle kernels push -p .` để trigger training run trên Kaggle.
-W&B được bật mặc định trong Kaggle run; nếu cần tắt thì set `ENABLE_WANDB=0`.
-Bạn có thể gắn tag cho W&B run bằng env `WANDB_TAGS`, ví dụ: `WANDB_TAGS=kaggle,lora,reazonspeech-small`.
-Đổi size model trên Kaggle bằng env `MODEL_SIZE` (ví dụ: `MODEL_SIZE=small`).
-Kaggle run mặc định skip post-train inference test; bật lại bằng `RUN_POST_TRAIN_TEST=1`.
+W&B bật/tắt và tags được quản lý trong `whisper_ja/config.py` (`use_wandb`, `wandb_tags`).
+Đổi size model cho Kaggle bằng `model_size` trong `whisper_ja/config.py` (hoặc override tạm qua CLI).
+Bật/tắt post-train inference test bằng `run_post_train_test` trong `whisper_ja/config.py`.
 
 ## MLOps Flow (CI + CT + CD)
 

@@ -61,11 +61,7 @@ def setup_wandb(config):
         config.use_wandb = False
         return
 
-    tags = list(config.wandb_tags)
-    env_tags = os.getenv("WANDB_TAGS", "")
-    if env_tags:
-        tags.extend([tag.strip() for tag in env_tags.split(",") if tag.strip()])
-    tags = list(dict.fromkeys(tags))
+    tags = list(dict.fromkeys(config.wandb_tags))
 
     wandb.init(
         project=config.wandb_project,
@@ -312,6 +308,7 @@ def parse_args():
     parser.add_argument("--num_proc", type=int, help="CPU cores for preprocessing")
     parser.add_argument("--ct2_output_dir", type=str, help="CTranslate2 export output directory")
     parser.add_argument("--push_to_hub", action="store_true", help="Upload artifacts to HF Hub")
+    parser.add_argument("--hf_repo_owner", type=str, help="HF namespace used for auto-generated repo IDs")
     parser.add_argument("--hub_model_id", type=str, help="HF repo id for deploy (merged/full) model")
     parser.add_argument("--hub_adapter_model_id", type=str, help="HF repo id for LoRA adapter model")
     parser.add_argument("--adapter_only_hub", action="store_true", help="Only push LoRA adapter, skip merged model push")
@@ -321,7 +318,12 @@ def parse_args():
 
 def main():
     args = parse_args()
-    config = Config()
+    config_kwargs: dict[str, str] = {}
+    if args.model_size:
+        config_kwargs["model_size"] = args.model_size
+    if args.hf_repo_owner:
+        config_kwargs["hf_repo_owner"] = args.hf_repo_owner
+    config = Config(**config_kwargs)
 
     # Override config with CLI args
     for key, value in vars(args).items():
@@ -358,31 +360,6 @@ def main():
         config.wandb_tags = [tag.strip() for tag in args.wandb_tags.split(",") if tag.strip()]
     if args.skip_final_test:
         config.run_post_train_test = False
-
-    # Keep all auto-generated names/paths in sync when model_size is explicitly set via CLI.
-    if args.model_size:
-        model_tag = f"whisper-{config.model_size}-ja"
-
-        if args.model_name is None:
-            config.model_name = f"openai/whisper-{config.model_size}"
-        if args.output_dir is None:
-            config.output_dir = f"./output/{model_tag}-lora"
-        if args.merged_output_dir is None:
-            config.merged_output_dir = f"./output/{model_tag}"
-        if args.wandb_project is None:
-            config.wandb_project = model_tag
-        if args.ct2_output_dir is None:
-            config.ct2_output_dir = f"./output/{model_tag}-ct2"
-        if args.hub_model_id is None:
-            owner = config.hub_model_id.split("/", 1)[0] if "/" in config.hub_model_id else "dungca"
-            config.hub_model_id = f"{owner}/{model_tag}"
-        if args.hub_adapter_model_id is None:
-            owner = (
-                config.hub_adapter_model_id.split("/", 1)[0]
-                if "/" in config.hub_adapter_model_id
-                else "dungca"
-            )
-            config.hub_adapter_model_id = f"{owner}/{model_tag}-lora"
 
     # Actions
     if args.export_only:

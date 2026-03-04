@@ -3,9 +3,9 @@
 Download a Whisper model from Hugging Face Hub and run ASR inference.
 
 Examples:
-  python infer_from_hf.py --repo_id dungca/whisper-small-ja --audio ./audio.wav
-  python infer_from_hf.py --repo_id dungca/whisper-small-ja-ct2-int8 --audio ./audio.mp3
-  HF_TOKEN=hf_xxx python infer_from_hf.py --repo_id dungca/whisper-small-ja --audio ./audio.wav --language ja
+  python infer_from_hf.py --repo_id <repo_owner>/whisper-small-ja --audio ./audio.wav
+  python infer_from_hf.py --repo_id <repo_owner>/whisper-small-ja-ct2-int8 --audio ./audio.mp3
+  HF_TOKEN=hf_xxx python infer_from_hf.py --repo_id <repo_owner>/whisper-small-ja --audio ./audio.wav --language ja
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--repo_id",
         required=True,
-        help="Hugging Face model repo id, e.g. dungca/whisper-small-ja",
+        help="Hugging Face model repo id, e.g. <repo_owner>/whisper-small-ja",
     )
     parser.add_argument(
         "--audio",

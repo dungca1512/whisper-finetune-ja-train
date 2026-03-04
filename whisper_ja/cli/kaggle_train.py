@@ -3,7 +3,7 @@
 Kaggle entrypoint for LoRA training.
 
 This script installs dependencies in Kaggle runtime, then runs train.py.
-Training defaults can be overridden by environment variables.
+Training defaults are read from Config; only secrets are read from env/Kaggle Secrets.
 """
 
 from __future__ import annotations
@@ -11,9 +11,9 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
-from subprocess import CalledProcessError
-from urllib.parse import quote
 from pathlib import Path
+
+from whisper_ja.config import Config
 
 
 _KAGGLE_SECRETS_CLIENT = None
@@ -110,31 +110,6 @@ def env(name: str, default: str) -> str:
     return default.strip()
 
 
-def env_int(name: str, default: int) -> int:
-    value = env(name, str(default))
-    try:
-        return int(value)
-    except ValueError as exc:
-        raise ValueError(f"Environment variable {name} must be an integer: {value}") from exc
-
-
-def env_float(name: str, default: float) -> float:
-    value = env(name, str(default))
-    try:
-        return float(value)
-    except ValueError as exc:
-        raise ValueError(f"Environment variable {name} must be a float: {value}") from exc
-
-
-def env_bool(name: str, default: bool) -> bool:
-    value = env(name, "1" if default else "0").lower()
-    if value in {"1", "true", "yes", "on"}:
-        return True
-    if value in {"0", "false", "no", "off"}:
-        return False
-    raise ValueError(f"Environment variable {name} must be a boolean-like value: {value}")
-
-
 def run(
     cmd: list[str],
     *,
@@ -178,47 +153,6 @@ def discover_project_root() -> Path | None:
             if train_parent.name == "cli" and train_parent.parent.name == "whisper_ja":
                 return train_parent.parent.parent
     return None
-
-
-def authenticated_repo_url(repo_url: str, token: str) -> str:
-    if not token or not repo_url.startswith("https://"):
-        return repo_url
-    if "@" in repo_url.split("//", 1)[1]:
-        return repo_url
-    prefix, suffix = repo_url.split("https://", 1)
-    del prefix
-    return f"https://x-access-token:{quote(token, safe='')}@{suffix}"
-
-
-def bootstrap_project_from_git() -> Path:
-    repo_url = env("TRAIN_REPO_URL", "https://github.com/dungca1512/whisper-finetune-ja-train.git")
-    repo_ref = env("TRAIN_REPO_REF", "main")
-    token = env("GITHUB_TOKEN", "")
-    target_dir = Path("/kaggle/working/whisper-finetune-ja-train")
-
-    if target_dir.exists() and (target_dir / "whisper_ja" / "cli" / "train.py").is_file():
-        print(f"✅ Reusing cloned repo: {target_dir}")
-        return target_dir
-
-    if target_dir.exists():
-        run(["rm", "-rf", str(target_dir)])
-
-    auth_url = authenticated_repo_url(repo_url, token)
-    try:
-        run(
-            ["git", "clone", "--depth", "1", "--branch", repo_ref, auth_url, str(target_dir)],
-            display_cmd=f"git clone --depth 1 --branch {repo_ref} <repo_url> {target_dir}",
-        )
-    except CalledProcessError as exc:
-        if "github.com" in repo_url and not token:
-            raise RuntimeError(
-                "Cannot clone TRAIN_REPO_URL from GitHub without credentials. "
-                "If the repo is private, add Kaggle Secret GITHUB_TOKEN "
-                "(classic PAT with repo read scope or fine-grained token with contents read)."
-            ) from exc
-        raise
-
-    return target_dir
 
 
 def install_dependencies(project_root: Path) -> None:
@@ -272,14 +206,14 @@ def build_runtime_env(project_root: Path) -> dict[str, str]:
 
     # Force-load secrets from embedded bundle / runtime bundle / Kaggle Secrets
     # so child processes (train.py) always receive them.
-    for key in ["HF_TOKEN", "WANDB_API_KEY", "GITHUB_TOKEN", "TRAIN_REPO_URL", "TRAIN_REPO_REF"]:
+    for key in ["HF_TOKEN", "WANDB_API_KEY"]:
         value = env(key, "")
         if value:
             runtime_env[key] = value
 
     runtime_env["PYTHONPATH"] = f"{project_root}:{runtime_env.get('PYTHONPATH', '')}".rstrip(":")
 
-    available_keys = [k for k in ["HF_TOKEN", "WANDB_API_KEY", "GITHUB_TOKEN"] if runtime_env.get(k)]
+    available_keys = [k for k in ["HF_TOKEN", "WANDB_API_KEY"] if runtime_env.get(k)]
     print(f"✅ Runtime env keys available for train: {available_keys}")
     return runtime_env
 
@@ -290,66 +224,56 @@ def main() -> int:
     run([sys.executable, "-m", "pip", "install", "--upgrade", "pip"])
     project_root = discover_project_root()
     if project_root is None:
-        print("⚠️  Project files not found in runtime snapshot. Cloning repo as fallback...")
-        project_root = bootstrap_project_from_git()
+        raise FileNotFoundError(
+            "Project files not found in runtime snapshot. "
+            "Ensure kernel push includes whisper_ja package and train entrypoints."
+        )
     print(f"✅ Project root: {project_root}")
 
     install_dependencies(project_root)
 
-    model_size = env("MODEL_SIZE", "tiny")
-    model_tag = f"whisper-{model_size}-ja"
-    repo_owner = env("HF_REPO_OWNER", "dungca")
-    model_name = env("MODEL_NAME", "")
+    config = Config()
 
     command = [
         *resolve_train_entrypoint(project_root),
-        "--model_size", model_size,
-        "--reazonspeech_size", env("REAZONSPEECH_SIZE", "small"),
-        "--batch_size", str(env_int("BATCH_SIZE", 32)),
-        "--num_train_epochs", str(env_int("NUM_EPOCHS", 3)),
-        "--learning_rate", str(env_float("LEARNING_RATE", 1e-5)),
-        "--num_proc", str(env_int("NUM_PROC", 1)),
-        "--output_dir", env("LORA_OUTPUT_DIR", f"./output/{model_tag}-lora"),
-        "--merged_output_dir", env("MERGED_OUTPUT_DIR", f"./output/{model_tag}"),
-        "--ct2_output_dir", env("CT2_OUTPUT_DIR", f"./output/{model_tag}-ct2"),
-        "--wandb_project", env("WANDB_PROJECT", model_tag),
-        "--hub_adapter_model_id", env("HF_ADAPTER_REPO_ID", f"{repo_owner}/{model_tag}-lora"),
-        "--hub_model_id", env("HF_MERGED_REPO_ID", f"{repo_owner}/{model_tag}"),
-        "--lora_r", str(env_int("LORA_R", 16)),
-        "--lora_alpha", str(env_int("LORA_ALPHA", 32)),
-        "--lora_dropout", str(env_float("LORA_DROPOUT", 0.05)),
-        "--push_to_hub",
+        "--model_size", config.model_size,
+        "--reazonspeech_size", config.reazonspeech_size,
+        "--batch_size", str(config.batch_size),
+        "--num_train_epochs", str(config.num_train_epochs),
+        "--learning_rate", str(config.learning_rate),
+        "--num_proc", str(config.num_proc),
+        "--output_dir", config.output_dir,
+        "--merged_output_dir", config.merged_output_dir,
+        "--ct2_output_dir", config.ct2_output_dir,
+        "--wandb_project", config.wandb_project,
+        "--hub_adapter_model_id", config.hub_adapter_model_id,
+        "--hub_model_id", config.hub_model_id,
+        "--lora_r", str(config.lora_r),
+        "--lora_alpha", str(config.lora_alpha),
+        "--lora_dropout", str(config.lora_dropout),
     ]
 
-    if model_name:
-        command.extend(["--model_name", model_name])
-
-    # Enable W&B by default; disable explicitly with ENABLE_WANDB=0.
-    if not env_bool("ENABLE_WANDB", True):
+    if config.model_name:
+        command.extend(["--model_name", config.model_name])
+    if not config.use_wandb:
         command.append("--no_wandb")
-
-    if env("ADAPTER_ONLY_HUB", "0") == "1":
+    if config.push_to_hub:
+        command.append("--push_to_hub")
+    if not config.push_merged_to_hub:
         command.append("--adapter_only_hub")
-
-    if env("NO_MERGE_LORA", "0") == "1":
+    if not config.save_merged_model:
         command.append("--no_merge_lora")
-
-    if env("FULL_FINETUNE", "0") == "1":
+    if not config.use_lora:
         command.append("--full_finetune")
-
-    target_modules = env("LORA_TARGET_MODULES", "")
-    if target_modules:
-        command.extend(["--lora_target_modules", target_modules])
-
-    max_train_samples = env_int("MAX_TRAIN_SAMPLES", 0)
-    if max_train_samples > 0:
-        command.extend(["--max_train_samples", str(max_train_samples)])
-
-    wandb_tags = env("WANDB_TAGS", "")
-    if wandb_tags:
-        command.extend(["--wandb_tags", wandb_tags])
-
-    if env("RUN_POST_TRAIN_TEST", "0") != "1":
+    if config.lora_target_modules:
+        command.extend(["--lora_target_modules", ",".join(config.lora_target_modules)])
+    if config.max_train_samples > 0:
+        command.extend(["--max_train_samples", str(config.max_train_samples)])
+    if config.max_eval_samples > 0:
+        command.extend(["--max_eval_samples", str(config.max_eval_samples)])
+    if config.wandb_tags:
+        command.extend(["--wandb_tags", ",".join(config.wandb_tags)])
+    if not config.run_post_train_test:
         command.append("--skip_final_test")
 
     runtime_env = build_runtime_env(project_root)
