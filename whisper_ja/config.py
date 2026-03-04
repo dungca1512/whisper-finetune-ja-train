@@ -93,47 +93,30 @@ class Config:
 
         model_tag = f"whisper-{self.model_size}-ja"
 
-        legacy_model_names = {
-            f"openai/whisper-{DEFAULT_MODEL_SIZE}",
-            "openai/whisper-tiny",
-        }
-        if not self.model_name or self.model_name in legacy_model_names:
+        legacy_model_name = f"openai/whisper-{DEFAULT_MODEL_SIZE}"
+        if not self.model_name or self.model_name == legacy_model_name:
             self.model_name = f"openai/whisper-{self.model_size}"
 
-        legacy_output_dirs = {
-            f"./output/whisper-{DEFAULT_MODEL_SIZE}-ja-lora",
-            "./output/whisper-tiny-ja-lora",
-        }
-        if not self.output_dir or self.output_dir in legacy_output_dirs:
+        legacy_output_dir = f"./output/whisper-{DEFAULT_MODEL_SIZE}-ja-lora"
+        if not self.output_dir or self.output_dir == legacy_output_dir:
             self.output_dir = f"./output/{model_tag}-lora"
-        legacy_merged_dirs = {
-            f"./output/whisper-{DEFAULT_MODEL_SIZE}-ja",
-            "./output/whisper-tiny-ja",
-        }
-        if not self.merged_output_dir or self.merged_output_dir in legacy_merged_dirs:
+
+        legacy_merged_dir = f"./output/whisper-{DEFAULT_MODEL_SIZE}-ja"
+        if not self.merged_output_dir or self.merged_output_dir == legacy_merged_dir:
             self.merged_output_dir = f"./output/{model_tag}"
-        legacy_wandb_projects = {
-            f"whisper-{DEFAULT_MODEL_SIZE}-ja",
-            "whisper-tiny-ja",
-        }
-        if not self.wandb_project or self.wandb_project in legacy_wandb_projects:
+
+        legacy_wandb_project = f"whisper-{DEFAULT_MODEL_SIZE}-ja"
+        if not self.wandb_project or self.wandb_project == legacy_wandb_project:
             self.wandb_project = model_tag
-        legacy_ct2_dirs = {
-            f"./output/whisper-{DEFAULT_MODEL_SIZE}-ja-ct2",
-            "./output/whisper-tiny-ja-ct2",
-        }
-        if not self.ct2_output_dir or self.ct2_output_dir in legacy_ct2_dirs:
+
+        legacy_ct2_dir = f"./output/whisper-{DEFAULT_MODEL_SIZE}-ja-ct2"
+        if not self.ct2_output_dir or self.ct2_output_dir == legacy_ct2_dir:
             self.ct2_output_dir = f"./output/{model_tag}-ct2"
-        legacy_hub_model_ids = {
-            f"{DEFAULT_HF_REPO_OWNER}/whisper-{DEFAULT_MODEL_SIZE}-ja",
-            f"{DEFAULT_HF_REPO_OWNER}/whisper-tiny-ja",
-        }
-        if not self.hub_model_id or self.hub_model_id in legacy_hub_model_ids:
+
+        legacy_hub_model_id = f"{DEFAULT_HF_REPO_OWNER}/whisper-{DEFAULT_MODEL_SIZE}-ja"
+        if not self.hub_model_id or self.hub_model_id == legacy_hub_model_id:
             self.hub_model_id = f"{self.hf_repo_owner}/{model_tag}"
 
-        legacy_hub_adapter_ids = {
-            f"{DEFAULT_HF_REPO_OWNER}/whisper-{DEFAULT_MODEL_SIZE}-ja-lora",
-            f"{DEFAULT_HF_REPO_OWNER}/whisper-tiny-ja-lora",
-        }
-        if not self.hub_adapter_model_id or self.hub_adapter_model_id in legacy_hub_adapter_ids:
+        legacy_hub_adapter_id = f"{DEFAULT_HF_REPO_OWNER}/whisper-{DEFAULT_MODEL_SIZE}-ja-lora"
+        if not self.hub_adapter_model_id or self.hub_adapter_model_id == legacy_hub_adapter_id:
             self.hub_adapter_model_id = f"{self.hf_repo_owner}/{model_tag}-lora"

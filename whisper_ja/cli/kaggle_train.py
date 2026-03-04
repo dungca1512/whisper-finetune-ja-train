@@ -13,7 +13,40 @@ import subprocess
 import sys
 from pathlib import Path
 
-from whisper_ja.config import Config
+
+def _bootstrap_import_path() -> Path | None:
+    candidates = [
+        Path.cwd(),
+        Path(__file__).resolve().parent,
+        Path(__file__).resolve().parent.parent,
+        Path(__file__).resolve().parent.parent.parent,
+        Path("/kaggle/src"),
+        Path("/kaggle/working"),
+    ]
+    seen: set[str] = set()
+    for candidate in candidates:
+        candidate_str = str(candidate)
+        if candidate_str in seen:
+            continue
+        seen.add(candidate_str)
+        if (candidate / "whisper_ja" / "config.py").is_file():
+            if candidate_str not in sys.path:
+                sys.path.insert(0, candidate_str)
+            return candidate
+    return None
+
+
+_BOOTSTRAP_ROOT = _bootstrap_import_path()
+
+try:
+    from whisper_ja.config import Config
+except ModuleNotFoundError:
+    print("❌ Failed to import whisper_ja.config")
+    print(f"   cwd={Path.cwd()}")
+    print(f"   script={Path(__file__).resolve()}")
+    print(f"   bootstrap_root={_BOOTSTRAP_ROOT}")
+    print(f"   sys.path[0]={sys.path[0] if sys.path else ''}")
+    raise
 
 
 _KAGGLE_SECRETS_CLIENT = None
