@@ -178,18 +178,24 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           WANDB_API_KEY: ${{ secrets.WANDB_API_KEY }}
+          GITHUB_READ_TOKEN: ${{ secrets.GITHUB_READ_TOKEN || secrets.CROSS_REPO_PAT }}
+          GITHUB_SOURCE_REPO: ${{ github.repository }}
+          GITHUB_SOURCE_REF: ${{ github.sha }}
         run: |
           python - <<'PY'
           import json
           import os
           from pathlib import Path
 
-          script_path = Path("whisper_ja/cli/kaggle_train.py")
+          script_path = Path("kaggle_train.py")
           source = script_path.read_text(encoding="utf-8")
 
           payload = {
               "HF_TOKEN": os.environ.get("HF_TOKEN", "").strip(),
               "WANDB_API_KEY": os.environ.get("WANDB_API_KEY", "").strip(),
+              "GITHUB_READ_TOKEN": os.environ.get("GITHUB_READ_TOKEN", "").strip(),
+              "GITHUB_SOURCE_REPO": os.environ.get("GITHUB_SOURCE_REPO", "").strip(),
+              "GITHUB_SOURCE_REF": os.environ.get("GITHUB_SOURCE_REF", "").strip(),
           }
           payload = {k: v for k, v in payload.items() if v}
 
@@ -220,7 +226,7 @@ jobs:
         if: always()
         run: |
           rm -f runtime_secrets.json
-          git checkout -- whisper_ja/cli/kaggle_train.py
+          git checkout -- kaggle_train.py
 
       - name: Print kernel status
         run: |
