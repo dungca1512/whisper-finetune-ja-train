@@ -1,4 +1,4 @@
-# Whisper JA - LoRA Training (Private Repo)
+# Whisper JA - LoRA Training
 
 Repo này là phần training private cho Japanese ASR. Mặc định dùng LoRA để tránh full finetune làm giảm chất lượng.
 
