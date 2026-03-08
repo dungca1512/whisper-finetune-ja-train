@@ -39,11 +39,12 @@ class Config:
     merged_output_dir: str = ""
     save_merged_model: bool = True
     num_train_epochs: int = 3
-    batch_size: int = 16           # Safe default for Kaggle P100 16GB
-    eval_batch_size: int = 8
+    batch_size: int = 4           # Safe default for Kaggle P100 16GB
+    eval_batch_size: int = 4
     learning_rate: float = 1e-5
     warmup_steps: int = 500
-    gradient_accumulation_steps: int = 4
+    gradient_accumulation_steps: int = 16
+    gradient_checkpointing: bool = True  # Giảm VRAM bằng cách tính lại forward pass trong backward
 
     # === LoRA (khuyến nghị) ===
     use_lora: bool = True

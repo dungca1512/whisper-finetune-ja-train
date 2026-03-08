@@ -44,6 +44,7 @@ def create_trainer(
         output_dir=config.output_dir,
 
         # Training
+        gradient_checkpointing=config.gradient_checkpointing,
         num_train_epochs=config.num_train_epochs,
         per_device_train_batch_size=config.batch_size,
         per_device_eval_batch_size=config.eval_batch_size,

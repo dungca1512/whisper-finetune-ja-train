@@ -74,6 +74,9 @@ def load_model_and_processor(config):
     model.generation_config.forced_decoder_ids = None
 
     model = _apply_lora_if_enabled(config, model)
+    
+    if config.use_lora and getattr(config, "gradient_checkpointing", False):
+        model.enable_input_require_grads()
 
     total_params = _count_total_params(model) / 1e6
     trainable_params = _count_trainable_params(model) / 1e6
