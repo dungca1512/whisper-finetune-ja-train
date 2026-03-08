@@ -122,7 +122,11 @@ class DataCollatorSpeechSeq2SeqWithPadding:
         # Skip invalid samples
         features = [f for f in features if f.get("valid", True)]
         if not features:
-            return None
+            features = [{
+                "input_features": [[0.0] * 80] * 3000,
+                "labels": [50256],  # pad token id
+                "valid": False,
+            }]
 
         input_features = [
             {"input_features": f["input_features"]} for f in features

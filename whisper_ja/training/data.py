@@ -71,6 +71,7 @@ def load_and_prepare_train(config, feature_extractor, tokenizer):
         desc="preprocess-train",
     )
 
+    dataset = dataset.filter(lambda x: x["valid"], desc="filter-train")
     print(f"✅ Train ready: {len(dataset):,} samples ({time.perf_counter() - pre_start:.1f}s)")
 
     return dataset
