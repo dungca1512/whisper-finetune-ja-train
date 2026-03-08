@@ -17,7 +17,12 @@ def prepare_sample(batch, feature_extractor, tokenizer):
             audio["array"],
             sampling_rate=audio["sampling_rate"],
         ).input_features[0]
-        batch["labels"] = tokenizer(batch["transcription"]).input_ids
+        with tokenizer.as_target_tokenizer():
+            batch["labels"] = tokenizer(
+                batch["transcription"],
+                language="ja",
+                task="transcribe",
+            ).input_ids
         batch["valid"] = True
     except Exception:
         # File corrupt → tạo dummy data, sẽ filter sau
