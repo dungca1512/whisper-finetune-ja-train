@@ -11,7 +11,7 @@ on:
       - kaggle_train.py
       - kernel-metadata.json
       - .kaggleignore
-      - .github/workflows/trigger_kaggle_train.yml
+      # - .github/workflows/trigger_kaggle_train.yml
       - whisper_ja/config.py
       - whisper_ja/training/**
       - whisper_ja/cli/train.py
