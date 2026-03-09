@@ -4,7 +4,6 @@ on:
   push:
     branches: [main]
     paths:
-      - whisper_ja/training/**
       - train.py
       - requirements.txt
       - data_validation.py
@@ -13,7 +12,11 @@ on:
       - kernel-metadata.json
       - .kaggleignore
       - .github/workflows/trigger_kaggle_train.yml
-      - whisper_ja/**
+      - whisper_ja/config.py
+      - whisper_ja/training/**
+      - whisper_ja/cli/train.py
+      - whisper_ja/cli/kaggle_train.py
+      - whisper_ja/cli/data_validation.py
   workflow_dispatch:
     inputs:
       reazonspeech_size:
