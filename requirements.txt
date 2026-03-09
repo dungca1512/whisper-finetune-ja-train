@@ -13,3 +13,18 @@ ctranslate2
 faster-whisper
 tensorboard
 kagglehub
+python-dotenv
+
+# Serving: ONNX (CPU/GPU general — required for HF Spaces)
+optimum[exporters]
+onnxruntime
+
+# Serving: ONNX GPU (optional, use instead of onnxruntime on Nvidia GPU)
+# onnxruntime-gpu
+
+# Serving: TensorRT (Nvidia GPU only — install manually on GPU server)
+# tensorrt>=8.6
+# polygraphy  # optional, for TRT engine validation
+
+# Serving: Triton client (optional, for testing Triton endpoint)
+# tritonclient[all]

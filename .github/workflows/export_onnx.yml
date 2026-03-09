@@ -1,0 +1,218 @@
+name: Export ONNX and Benchmark
+
+on:
+  # Auto-trigger khi promote_model.yml dispatch thành công
+  repository_dispatch:
+    types: [asr-model-promoted]
+
+  # Manual trigger
+  workflow_dispatch:
+    inputs:
+      model_repo_id:
+        description: "Merged model repo on HuggingFace Hub"
+        required: true
+        default: "dungca/whisper-tiny-ja"
+      model_size:
+        description: "Whisper model size"
+        required: false
+        default: "tiny"
+      n_runs:
+        description: "Number of benchmark runs"
+        required: false
+        default: "20"
+      baseline_benchmark:
+        description: "Path to baseline benchmark JSON (leave empty to skip regression gate)"
+        required: false
+        default: ""
+      max_latency_regression_pct:
+        description: "Max allowed latency regression %"
+        required: false
+        default: "20"
+      push_onnx_to_hub:
+        description: "Push ONNX model to HuggingFace Hub"
+        required: false
+        default: "true"
+
+permissions:
+  contents: read
+
+jobs:
+  export-and-benchmark:
+    runs-on: ubuntu-latest
+
+    env:
+      # Prefer repository_dispatch payload, fallback to workflow_dispatch inputs
+      MODEL_REPO_ID: ${{ github.event.client_payload.model_repo_id || inputs.model_repo_id || 'dungca/whisper-tiny-ja' }}
+      MODEL_SIZE: ${{ inputs.model_size || 'tiny' }}
+      N_RUNS: ${{ inputs.n_runs || '20' }}
+      BASELINE_BENCHMARK: ${{ inputs.baseline_benchmark || '' }}
+      MAX_LATENCY_REGRESSION_PCT: ${{ inputs.max_latency_regression_pct || '20' }}
+      PUSH_ONNX_TO_HUB: ${{ inputs.push_onnx_to_hub || 'true' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install serving dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install \
+            torch --index-url https://download.pytorch.org/whl/cpu \
+            transformers>=4.40 \
+            optimum[exporters] \
+            onnxruntime \
+            faster-whisper \
+            huggingface_hub \
+            soundfile \
+            librosa \
+            numpy
+
+      - name: Download merged model from HuggingFace Hub
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          python - <<'PY'
+          import os
+          from huggingface_hub import snapshot_download
+
+          repo_id = os.environ["MODEL_REPO_ID"]
+          token = os.environ.get("HF_TOKEN") or None
+          print(f"Downloading model: {repo_id}")
+          local_dir = snapshot_download(
+              repo_id=repo_id,
+              token=token,
+              local_dir="./downloaded_model",
+          )
+          print(f"Downloaded to: {local_dir}")
+          PY
+
+      - name: Export to ONNX
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          python serving.py \
+            --export_onnx \
+            --model_size "${MODEL_SIZE}" \
+            --model_dir ./downloaded_model \
+            --onnx_output_dir ./output/whisper-${MODEL_SIZE}-ja-onnx \
+            --output reports/onnx_export_report.json
+
+      - name: Run latency benchmark
+        run: |
+          BASELINE_ARGS=""
+          if [ -n "${BASELINE_BENCHMARK}" ] && [ -f "${BASELINE_BENCHMARK}" ]; then
+            BASELINE_ARGS="--baseline_benchmark ${BASELINE_BENCHMARK} --fail_on_regression"
+          fi
+
+          python serving.py \
+            --benchmark \
+            --model_size "${MODEL_SIZE}" \
+            --onnx_output_dir ./output/whisper-${MODEL_SIZE}-ja-onnx \
+            --n_runs "${N_RUNS}" \
+            --audio_duration 3.0 \
+            --benchmark_backend onnxruntime \
+            --max_latency_regression_pct "${MAX_LATENCY_REGRESSION_PCT}" \
+            --output reports/benchmark_report.json \
+            ${BASELINE_ARGS}
+
+      - name: Push ONNX model to HuggingFace Hub
+        if: env.PUSH_ONNX_TO_HUB == 'true'
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          python - <<'PY'
+          import os
+          from huggingface_hub import HfApi
+
+          token = os.environ.get("HF_TOKEN")
+          if not token:
+              print("⚠️  No HF_TOKEN — skipping ONNX hub push")
+              raise SystemExit(0)
+
+          model_size = os.environ.get("MODEL_SIZE", "tiny")
+          repo_id = f"dungca/whisper-{model_size}-ja-onnx"
+          onnx_dir = f"./output/whisper-{model_size}-ja-onnx"
+
+          import os.path
+          if not os.path.isdir(onnx_dir):
+              print(f"⚠️  ONNX directory not found: {onnx_dir} — skipping hub push")
+              raise SystemExit(0)
+
+          api = HfApi(token=token)
+          api.create_repo(repo_id=repo_id, repo_type="model", exist_ok=True)
+          api.upload_folder(
+              repo_id=repo_id,
+              repo_type="model",
+              folder_path=onnx_dir,
+              commit_message="Update ONNX export from automated serving pipeline",
+          )
+          print(f"✅ ONNX model pushed: https://huggingface.co/{repo_id}")
+          PY
+
+      - name: Write workflow summary
+        if: always()
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          summary_path = os.environ["GITHUB_STEP_SUMMARY"]
+
+          def load_report(path):
+              p = Path(path)
+              if p.exists():
+                  return json.loads(p.read_text(encoding="utf-8"))
+              return {}
+
+          onnx_report = load_report("reports/onnx_export_report.json")
+          bench_report = load_report("reports/benchmark_report.json")
+
+          with open(summary_path, "a", encoding="utf-8") as f:
+              f.write("## ONNX Export + Benchmark Summary\n")
+              f.write(f"- Model: `{os.environ.get('MODEL_REPO_ID', '?')}`\n")
+              f.write(f"- Model size: `{os.environ.get('MODEL_SIZE', '?')}`\n\n")
+
+              # ONNX export result
+              onnx_steps = onnx_report.get("steps", {}).get("onnx_export", {})
+              onnx_success = onnx_steps.get("success", False)
+              f.write(f"### ONNX Export\n")
+              f.write(f"- Status: `{'✅ success' if onnx_success else '❌ failed'}`\n")
+              val = onnx_steps.get("validation", {})
+              if val.get("valid"):
+                  f.write(f"- Validation latency: `{val.get('latency_ms')}ms`\n")
+
+              # Benchmark results
+              results = bench_report.get("steps", {}).get("benchmark", {}).get("results", {})
+              if results:
+                  f.write(f"\n### Latency Benchmark ({bench_report.get('steps', {}).get('benchmark', {}).get('n_runs', '?')} runs)\n")
+                  f.write("| Backend | Mean (ms) | P95 (ms) |\n")
+                  f.write("|---------|-----------|----------|\n")
+                  for name, res in results.items():
+                      if res.get("available"):
+                          f.write(f"| `{name}` | `{res.get('mean_ms')}` | `{res.get('p95_ms')}` |\n")
+                      else:
+                          f.write(f"| `{name}` | — | ⏭ {res.get('skip_reason', '')[:30]} |\n")
+
+              # Regression gate
+              regression = bench_report.get("steps", {}).get("latency_regression", {})
+              if regression:
+                  f.write(f"\n### Latency Regression Gate\n")
+                  f.write(f"- Decision: `{regression.get('decision', '?')}`\n")
+                  if regression.get("current_mean_ms"):
+                      f.write(f"- Current: `{regression['current_mean_ms']}ms` vs baseline `{regression.get('baseline_mean_ms')}ms`\n")
+                      f.write(f"- Regression: `{regression.get('regression_pct')}%` (max: `{regression.get('max_regression_pct')}%`)\n")
+          PY
+
+      - name: Upload reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: onnx-benchmark-reports
+          path: reports/
+          if-no-files-found: warn

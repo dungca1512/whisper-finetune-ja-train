@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
     paths:
+      - whisper_ja/training/**
       - train.py
       - requirements.txt
       - data_validation.py

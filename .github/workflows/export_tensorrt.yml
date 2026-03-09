@@ -1,0 +1,264 @@
+name: Export TensorRT + Generate Triton Config
+
+# Manual trigger ONLY — requires self-hosted GPU runner.
+# TRT engines are hardware-specific: build on the same GPU you will serve on.
+on:
+  workflow_dispatch:
+    inputs:
+      model_size:
+        description: "Whisper model size"
+        required: true
+        default: "tiny"
+      onnx_source:
+        description: "ONNX source: 'hub' (download from HF) or 'local' (use runner's local path)"
+        required: false
+        default: "hub"
+      onnx_hub_repo:
+        description: "HF Hub repo for ONNX model (if onnx_source=hub)"
+        required: false
+        default: "dungca/whisper-tiny-ja-onnx"
+      tensorrt_precision:
+        description: "TRT engine precision: fp32 / fp16 / int8"
+        required: false
+        default: "fp16"
+      triton_backend:
+        description: "Triton backend: tensorrt / onnxruntime / auto"
+        required: false
+        default: "auto"
+      push_triton_config_to_hub:
+        description: "Push Triton config to HuggingFace Hub"
+        required: false
+        default: "false"
+      run_trt_benchmark:
+        description: "Run TRT benchmark after export"
+        required: false
+        default: "true"
+
+# IMPORTANT: This workflow requires a self-hosted GitHub Actions runner
+# with an Nvidia GPU and TensorRT installed.
+# Register a runner: Settings → Actions → Runners → New self-hosted runner
+
+permissions:
+  contents: read
+
+jobs:
+  export-tensorrt:
+    # Change to your self-hosted runner label, e.g. [self-hosted, gpu, t4]
+    # Falls back to ubuntu-latest (will skip TRT steps gracefully on CPU)
+    runs-on: ${{ vars.GPU_RUNNER_LABEL || 'ubuntu-latest' }}
+
+    env:
+      MODEL_SIZE: ${{ inputs.model_size }}
+      ONNX_SOURCE: ${{ inputs.onnx_source }}
+      ONNX_HUB_REPO: ${{ inputs.onnx_hub_repo }}
+      TRT_PRECISION: ${{ inputs.tensorrt_precision }}
+      TRITON_BACKEND: ${{ inputs.triton_backend }}
+      PUSH_TRITON_TO_HUB: ${{ inputs.push_triton_config_to_hub }}
+      RUN_TRT_BENCHMARK: ${{ inputs.run_trt_benchmark }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check GPU availability
+        id: gpu_check
+        run: |
+          if command -v nvidia-smi &> /dev/null; then
+            echo "gpu_available=true" >> "$GITHUB_OUTPUT"
+            nvidia-smi
+          else
+            echo "gpu_available=false" >> "$GITHUB_OUTPUT"
+            echo "⚠️  No GPU detected. TRT export will be skipped."
+          fi
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # Install torch with CUDA support if GPU available
+          if [ "${{ steps.gpu_check.outputs.gpu_available }}" == "true" ]; then
+            python -m pip install torch --index-url https://download.pytorch.org/whl/cu118
+          else
+            python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          fi
+          python -m pip install \
+            transformers>=4.40 \
+            optimum[exporters] \
+            onnxruntime \
+            huggingface_hub \
+            soundfile \
+            librosa \
+            numpy
+
+          # TensorRT — only install if GPU available
+          if [ "${{ steps.gpu_check.outputs.gpu_available }}" == "true" ]; then
+            python -m pip install tensorrt || echo "⚠️ tensorrt pip install failed — ensure TRT is pre-installed on runner"
+          fi
+
+      - name: Download ONNX model from HF Hub
+        if: env.ONNX_SOURCE == 'hub'
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          python - <<'PY'
+          import os
+          from huggingface_hub import snapshot_download
+
+          repo_id = os.environ["ONNX_HUB_REPO"]
+          token = os.environ.get("HF_TOKEN") or None
+          print(f"Downloading ONNX model: {repo_id}")
+          local_dir = snapshot_download(
+              repo_id=repo_id,
+              token=token,
+              local_dir="./downloaded_onnx",
+          )
+          print(f"Downloaded to: {local_dir}")
+          PY
+
+      - name: Set ONNX directory
+        id: onnx_dir
+        run: |
+          MODEL_SIZE="${{ inputs.model_size }}"
+          if [ "${{ env.ONNX_SOURCE }}" == "hub" ]; then
+            echo "onnx_dir=./downloaded_onnx" >> "$GITHUB_OUTPUT"
+          else
+            echo "onnx_dir=./output/whisper-${MODEL_SIZE}-ja-onnx" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Export to TensorRT
+        if: steps.gpu_check.outputs.gpu_available == 'true'
+        run: |
+          python serving.py \
+            --export_tensorrt \
+            --model_size "${MODEL_SIZE}" \
+            --onnx_output_dir "${{ steps.onnx_dir.outputs.onnx_dir }}" \
+            --tensorrt_output_dir "./output/whisper-${MODEL_SIZE}-ja-trt" \
+            --tensorrt_precision "${TRT_PRECISION}" \
+            --output reports/tensorrt_export_report.json
+
+      - name: Generate Triton model repository
+        run: |
+          python serving.py \
+            --gen_triton \
+            --model_size "${MODEL_SIZE}" \
+            --onnx_output_dir "${{ steps.onnx_dir.outputs.onnx_dir }}" \
+            --tensorrt_output_dir "./output/whisper-${MODEL_SIZE}-ja-trt" \
+            --triton_output_dir "./output/triton-whisper-${MODEL_SIZE}" \
+            --triton_backend "${TRITON_BACKEND}" \
+            --output reports/triton_config_report.json
+
+      - name: Run TRT benchmark
+        if: >
+          steps.gpu_check.outputs.gpu_available == 'true' &&
+          env.RUN_TRT_BENCHMARK == 'true'
+        run: |
+          python serving.py \
+            --benchmark \
+            --model_size "${MODEL_SIZE}" \
+            --onnx_output_dir "${{ steps.onnx_dir.outputs.onnx_dir }}" \
+            --tensorrt_output_dir "./output/whisper-${MODEL_SIZE}-ja-trt" \
+            --n_runs 20 \
+            --output reports/trt_benchmark_report.json
+
+      - name: Push Triton config to HF Hub
+        if: env.PUSH_TRITON_TO_HUB == 'true'
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          python - <<'PY'
+          import os
+          from huggingface_hub import HfApi
+
+          token = os.environ.get("HF_TOKEN")
+          if not token:
+              print("⚠️  No HF_TOKEN — skipping Triton config push")
+              raise SystemExit(0)
+
+          model_size = os.environ.get("MODEL_SIZE", "tiny")
+          triton_dir = f"./output/triton-whisper-{model_size}"
+          repo_id = f"dungca/whisper-{model_size}-ja-triton"
+
+          import os.path
+          if not os.path.isdir(triton_dir):
+              print(f"⚠️  Triton directory not found: {triton_dir}")
+              raise SystemExit(0)
+
+          api = HfApi(token=token)
+          api.create_repo(repo_id=repo_id, repo_type="model", exist_ok=True)
+          api.upload_folder(
+              repo_id=repo_id,
+              repo_type="model",
+              folder_path=triton_dir,
+              commit_message="Update Triton model repository config",
+          )
+          print(f"✅ Triton config pushed: https://huggingface.co/{repo_id}")
+          PY
+
+      - name: Write workflow summary
+        if: always()
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          summary_path = os.environ["GITHUB_STEP_SUMMARY"]
+
+          def load_report(path):
+              p = Path(path)
+              return json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
+
+          trt_report = load_report("reports/tensorrt_export_report.json")
+          triton_report = load_report("reports/triton_config_report.json")
+          bench_report = load_report("reports/trt_benchmark_report.json")
+
+          with open(summary_path, "a", encoding="utf-8") as f:
+              f.write("## TensorRT Export + Triton Config Summary\n")
+              f.write(f"- Model size: `{os.environ.get('MODEL_SIZE', '?')}`\n")
+              f.write(f"- TRT Precision: `{os.environ.get('TRT_PRECISION', '?')}`\n")
+              f.write(f"- Triton backend: `{os.environ.get('TRITON_BACKEND', '?')}`\n\n")
+
+              # TRT export
+              trt_steps = trt_report.get("steps", {}).get("tensorrt_export", {})
+              if trt_steps:
+                  f.write("### TensorRT Export\n")
+                  engines = trt_steps.get("engines", {})
+                  for name, eng in engines.items():
+                      status = "✅" if eng.get("success") else "❌"
+                      f.write(f"- `{name}`: {status}")
+                      if eng.get("build_time_sec"):
+                          f.write(f" ({eng['build_time_sec']}s)")
+                      f.write("\n")
+
+              # Triton config
+              triton_steps = triton_report.get("steps", {}).get("triton_config", {})
+              if triton_steps.get("success"):
+                  f.write(f"\n### Triton Repository\n")
+                  f.write(f"- Backend: `{triton_steps.get('backend', '?')}`\n")
+                  f.write(f"- Path: `{triton_steps.get('triton_repo', '?')}`\n")
+                  f.write(f"- Models: encoder, decoder, pipeline (ensemble)\n")
+
+              # TRT benchmark
+              results = bench_report.get("steps", {}).get("benchmark", {}).get("results", {})
+              if results:
+                  f.write("\n### TRT Benchmark\n")
+                  f.write("| Backend | Mean (ms) | P95 (ms) |\n")
+                  f.write("|---------|-----------|----------|\n")
+                  for name, res in results.items():
+                      if res.get("available"):
+                          f.write(f"| `{name}` | `{res.get('mean_ms')}` | `{res.get('p95_ms')}` |\n")
+          PY
+
+      - name: Upload reports and Triton config
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trt-triton-reports
+          path: |
+            reports/
+            output/triton-whisper-*/
+          if-no-files-found: warn

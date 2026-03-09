@@ -70,16 +70,34 @@ class Config:
     # === Preprocessing ===
     num_proc: int = 8  # Số CPU cores dùng cho preprocessing
 
-    # === Export ===
+    # === Export: CT2 ===
     export_ct2: bool = True
     ct2_output_dir: str = ""
     ct2_quantization: str = "int8"
 
+    # === Export: ONNX ===
+    # CPU/GPU general — dùng cho HF Spaces và inference không cần Nvidia
+    export_onnx: bool = True
+    onnx_output_dir: str = ""
+
+    # === Export: TensorRT ===
+    # Nvidia GPU only — dùng cho VPS/cloud GPU deployment
+    # Disable mặc định vì yêu cầu CUDA; bật khi có self-hosted GPU runner
+    export_tensorrt: bool = False
+    tensorrt_output_dir: str = ""
+    tensorrt_precision: str = "fp16"  # fp32 / fp16 / int8
+
+    # === Serving: Triton ===
+    triton_output_dir: str = ""
+
     # === Push to Hub ===
     push_to_hub: bool = False
     push_merged_to_hub: bool = True
+    push_onnx_to_hub: bool = True
     hub_model_id: str = ""
     hub_adapter_model_id: str = ""
+    hub_onnx_model_id: str = ""
+    hub_tensorrt_model_id: str = ""
 
     def __post_init__(self):
         size = self.model_size.strip()
@@ -114,6 +132,18 @@ class Config:
         if not self.ct2_output_dir or self.ct2_output_dir == legacy_ct2_dir:
             self.ct2_output_dir = f"./output/{model_tag}-ct2"
 
+        # ONNX paths
+        if not self.onnx_output_dir:
+            self.onnx_output_dir = f"./output/{model_tag}-onnx"
+
+        # TensorRT paths
+        if not self.tensorrt_output_dir:
+            self.tensorrt_output_dir = f"./output/{model_tag}-trt"
+
+        # Triton path
+        if not self.triton_output_dir:
+            self.triton_output_dir = f"./output/triton-{model_tag}"
+
         legacy_hub_model_id = f"{DEFAULT_HF_REPO_OWNER}/whisper-{DEFAULT_MODEL_SIZE}-ja"
         if not self.hub_model_id or self.hub_model_id == legacy_hub_model_id:
             self.hub_model_id = f"{self.hf_repo_owner}/{model_tag}"
@@ -121,3 +151,10 @@ class Config:
         legacy_hub_adapter_id = f"{DEFAULT_HF_REPO_OWNER}/whisper-{DEFAULT_MODEL_SIZE}-ja-lora"
         if not self.hub_adapter_model_id or self.hub_adapter_model_id == legacy_hub_adapter_id:
             self.hub_adapter_model_id = f"{self.hf_repo_owner}/{model_tag}-lora"
+
+        # ONNX + TRT hub IDs
+        if not self.hub_onnx_model_id:
+            self.hub_onnx_model_id = f"{self.hf_repo_owner}/{model_tag}-onnx"
+
+        if not self.hub_tensorrt_model_id:
+            self.hub_tensorrt_model_id = f"{self.hf_repo_owner}/{model_tag}-trt"
